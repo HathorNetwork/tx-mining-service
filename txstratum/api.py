@@ -1,9 +1,7 @@
-"""
-Copyright (c) Hathor Labs and its affiliates.
-
-This source code is licensed under the MIT license found in the
-LICENSE file in the root directory of this source tree.
-"""
+# Copyright (c) Hathor Labs and its affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 import json
 from typing import TYPE_CHECKING, Optional
@@ -17,13 +15,24 @@ if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager
 
 
+# Default maximum tx weight allowed to be mined in this server.
+MAX_TX_WEIGHT = 35
+
+
+# Tx timeout (seconds)
+TX_TIMEOUT = 20
+
+
 class App:
     """API used to manage tx job."""
 
-    def __init__(self, manager: 'TxMiningManager'):
+    def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[int] = None,
+                 tx_timeout: Optional[int] = None):
         """Init App."""
         super().__init__()
         self.manager = manager
+        self.max_tx_weight = max_tx_weight or MAX_TX_WEIGHT
+        self.tx_timeout = tx_timeout or TX_TIMEOUT
         self.app = web.Application()
         self.app.router.add_get('/health-check', self.health_check)
         self.app.router.add_get('/mining-status', self.mining_status)
@@ -60,9 +69,6 @@ class App:
             return web.json_response({'error': 'missing-tx'}, status=400)
         try:
             tx_bytes = bytes.fromhex(tx_hex)
-        except ValueError:
-            return web.json_response({'error': 'invalid-tx'}, status=400)
-        try:
             tx = tx_or_block_from_bytes(tx_bytes)
         except ValueError:
             return web.json_response({'error': 'invalid-tx'}, status=400)
@@ -70,9 +76,12 @@ class App:
         if not isinstance(tx, (Transaction, TokenCreationTransaction)):
             return web.json_response({'error': 'invalid-tx'}, status=400)
 
+        if tx.weight > self.max_tx_weight:
+            return web.json_response({'error': 'tx-weight-is-too-high'}, status=400)
+
         add_parents = data.get('add_parents', False)
         propagate = data.get('propagate', False)
-        job = MinerTxJob(tx_bytes, add_parents=add_parents, propagate=propagate)
+        job = MinerTxJob(tx_bytes, add_parents=add_parents, propagate=propagate, timeout=self.tx_timeout)
         success = self.manager.add_job(job)
         if not success:
             return web.json_response({'error': 'job-already-exists'}, status=400)

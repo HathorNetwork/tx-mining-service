@@ -1,9 +1,7 @@
-"""
-Copyright (c) Hathor Labs and its affiliates.
-
-This source code is licensed under the MIT license found in the
-LICENSE file in the root directory of this source tree.
-"""
+# Copyright (c) Hathor Labs and its affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 import asyncio
 import logging
@@ -27,6 +25,8 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--stratum-port', help='Port of Stratum server', type=int, default=8000)
     parser.add_argument('--api-port', help='Port of TxMining API server', type=int, default=8080)
     parser.add_argument('--log-config', help='Config file for logging', default='log.conf')
+    parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=int, default=None)
+    parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
     return parser
 
@@ -51,13 +51,14 @@ def execute(args: Namespace) -> None:
 
     backend = HathorClient(args.backend)
     manager = TxMiningManager(
-        backend=backend,
+        backend=backend
     )
     loop.run_until_complete(backend.start())
     loop.run_until_complete(manager.start())
     server = loop.run_until_complete(loop.create_server(manager, '0.0.0.0', args.stratum_port))
 
-    api_app = App(manager)
+    api_app = App(manager, max_tx_weight=args.max_tx_weight, tx_timeout=args.tx_timeout)
+    logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout)
     web_runner = web.AppRunner(api_app.app)
     loop.run_until_complete(web_runner.setup())
     site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)

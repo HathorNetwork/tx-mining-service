@@ -21,11 +21,16 @@ class HathorCommonsTestCase(unittest.TestCase):
         self.assertEqual(data, bytes(block))
 
         # These prints are here to test the methods.
-        self.assertEqual(str(block), 'Block(nonce=2591358, timestamp=1578075305, version=0, '
-                'weight=21.000000, hash=000006cb93385b8b87a545a1cbb6197e6caff600c12cc12fc54250d39c8088fc)')
-        self.assertEqual(repr(block), 'Block(nonce=2591358, timestamp=1578075305, version=0, '
-                'weight=21.000000, hash=000006cb93385b8b87a545a1cbb6197e6caff600c12cc12fc54250d39c8088fc, '
-                'inputs=[], outputs=[TxOutput(token_data=0b0, value=100000000000)], parents=[], data=)')
+        self.assertEqual(
+            str(block),
+            'Block(nonce=2591358, timestamp=1578075305, version=0, weight=21.000000, '
+            'hash=000006cb93385b8b87a545a1cbb6197e6caff600c12cc12fc54250d39c8088fc)'
+        )
+        self.assertEqual(
+            repr(block),
+            'Block(nonce=2591358, timestamp=1578075305, version=0, weight=21.000000, '
+            'hash=000006cb93385b8b87a545a1cbb6197e6caff600c12cc12fc54250d39c8088fc, '
+            'inputs=[], outputs=[TxOutput(token_data=0b0, value=100000000000)], parents=[], data=)')
         self.assertEqual(block.get_struct_nonce().hex(), '00000000000000000000000000278a7e')
 
         block.nonce += 1
@@ -77,16 +82,22 @@ class HathorCommonsTestCase(unittest.TestCase):
         self.assertFalse(tx.is_block)
 
         # These prints are here to test the methods.
-        self.assertEqual(str(tx), 'TokenCreationTransaction(nonce=33518441, timestamp=1578090723, '
-                'version=2, weight=20.645186, hash=00000828d80dd4cd809c959139f7b4261df41152f4cce65a8777eb1c3a1f9702, '
-                'token_name=ToTheMoon, token_symbol=🚀)')
-        self.assertEqual(repr(tx), 'TokenCreationTransaction(nonce=33518441, timestamp=1578090723, '
-                'version=2, weight=20.645186, hash=00000828d80dd4cd809c959139f7b4261df41152f4cce65a8777eb1c3a1f9702, '
-                'inputs=[TxInput(tx_id=000005551d7740fd7d3c0acc50b5677fdd844f1225985aa431e1712af2a2fd89, index=0)], '
-                'outputs=[TxOutput(token_data=0b0, value=9800), TxOutput(token_data=0b1, value=20000), '
-                'TxOutput(token_data=0b10000001, value=0b1), TxOutput(token_data=0b10000001, value=0b10)], '
-                'parents=[\'00001a72272f48339fcc5d5ec5deaf197855964b0eb912e8c6eefe00928b6cf6\', '
-                '\'00001055641c20b71871ed2c5c7d4096a34f40888d79c25bce74421646e732dc\'])')
+        self.assertEqual(
+            str(tx),
+            'TokenCreationTransaction(nonce=33518441, timestamp=1578090723, version=2, weight=20.645186, '
+            'hash=00000828d80dd4cd809c959139f7b4261df41152f4cce65a8777eb1c3a1f9702, '
+            'token_name=ToTheMoon, token_symbol=🚀)'
+        )
+        self.assertEqual(
+            repr(tx),
+            'TokenCreationTransaction(nonce=33518441, timestamp=1578090723, version=2, weight=20.645186, '
+            'hash=00000828d80dd4cd809c959139f7b4261df41152f4cce65a8777eb1c3a1f9702, '
+            'inputs=[TxInput(tx_id=000005551d7740fd7d3c0acc50b5677fdd844f1225985aa431e1712af2a2fd89, index=0)], '
+            'outputs=[TxOutput(token_data=0b0, value=9800), TxOutput(token_data=0b1, value=20000), '
+            'TxOutput(token_data=0b10000001, value=0b1), TxOutput(token_data=0b10000001, value=0b10)], '
+            'parents=[\'00001a72272f48339fcc5d5ec5deaf197855964b0eb912e8c6eefe00928b6cf6\', '
+            '\'00001055641c20b71871ed2c5c7d4096a34f40888d79c25bce74421646e732dc\'])'
+        )
 
         tx.nonce += 1
         tx.update_hash()

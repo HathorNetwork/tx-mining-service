@@ -1,15 +1,13 @@
-"""
-Copyright (c) Hathor Labs and its affiliates.
-
-This source code is licensed under the MIT license found in the
-LICENSE file in the root directory of this source tree.
-"""
+# Copyright (c) Hathor Labs and its affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 import enum
 import hashlib
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from txstratum.commons import BaseTransaction, Block
 from txstratum.commons.scripts import create_output_script
@@ -25,7 +23,13 @@ class JobStatus(enum.Enum):
     MINING = 'mining'
     DONE = 'done'
     FAILED = 'failed'
+    TIMEOUT = 'timeout'
     CANCELLED = 'cancelled'
+
+    @classmethod
+    def get_after_mining_states(cls) -> Set['JobStatus']:
+        """Return a set with all possible states after mining has finished."""
+        return set([cls.DONE, cls.FAILED, cls.TIMEOUT, cls.CANCELLED])
 
 
 class MinerJob(ABC):
@@ -70,12 +74,19 @@ class MinerJob(ABC):
 class MinerTxJob(MinerJob):
     """Tx job."""
 
-    def __init__(self, data: bytes, *, add_parents: bool = False, propagate: bool = False):
-        """Init TxJob."""
+    def __init__(self, data: bytes, *, add_parents: bool = False, propagate: bool = False,
+                 timeout: Optional[int] = None):
+        """Init TxJob.
+
+        add_parents: Add parents before mining tx.
+        propagate: Propagate tx to the full node after it is mined.
+        timeout: Mining timeout.
+        """
         self._tx: BaseTransaction = tx_or_block_from_bytes(data)
 
         self.add_parents: bool = add_parents
         self.propagate: bool = propagate
+        self.timeout: Optional[int] = timeout
 
         self.expected_queue_time: float = 0
         self.expected_mining_time: float = 0

@@ -1,9 +1,7 @@
-"""
-Copyright (c) Hathor Labs and its affiliates.
-
-This source code is licensed under the MIT license found in the
-LICENSE file in the root directory of this source tree.
-"""
+# Copyright (c) Hathor Labs and its affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 import asyncio
 import time
@@ -51,6 +49,11 @@ class TxMiningManager:
         self.latest_submitted_block_height: int = -1
         self.block_template_updated_at: float = 0
         self.block_template: Optional['BlockTemplate'] = None
+
+        # Statistics
+        self.txs_solved: int = 0
+        self.blocks_found: int = 0
+        self.txs_timeout: int = 0
 
     def __call__(self) -> StratumProtocol:
         """Return an instance of StratumProtocol for a new connection."""
@@ -107,6 +110,7 @@ class TxMiningManager:
             # XXX Should we stop all other miners from mining?
             asyncio.ensure_future(self.update_block_template())
             self.log.info('Block found', job=job.uuid)
+            self.blocks_found += 1
 
         else:
             assert isinstance(job, MinerTxJob)
@@ -122,6 +126,7 @@ class TxMiningManager:
             if job.propagate:
                 asyncio.ensure_future(self.backend.push_tx_or_block(job.get_data()))
             self.log.info('TxJob solved', propagate=job.propagate, job=job.to_dict())
+            self.txs_solved += 1
 
     async def update_block_template(self) -> None:
         """Update block template. It is periodically called."""
@@ -151,6 +156,9 @@ class TxMiningManager:
             'miners': miners,
             'total_hashrate_ghs': total_hashrate_ghs,
             'started_at': self.started_at,
+            'txs_solved': self.txs_solved,
+            'txs_timeout': self.txs_timeout,
+            'blocks_found': self.blocks_found,
             'uptime': self.uptime,
             'tx_queue': len(self.tx_queue),
             'tx_jobs': [job.to_dict() for job in self.tx_jobs.values()],
@@ -201,6 +209,19 @@ class TxMiningManager:
         self.stop_mining_tx(job)
         self.log.info('TxJob cancelled', job=job.to_dict())
 
+    def _job_timeout_if_possible(self, job: MinerTxJob) -> None:
+        """Stop mining a tx job because it timeout."""
+        if job.status != JobStatus.MINING:
+            return
+        job.status = JobStatus.TIMEOUT
+        self.tx_queue.remove(job)
+        self.stop_mining_tx(job)
+        self.log.info('TxJob timeout', job=job.to_dict())
+        self.txs_timeout += 1
+        # Schedule to clean it up.
+        loop = asyncio.get_event_loop()
+        loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job)
+
     def enqueue_tx_job(self, job: MinerTxJob) -> None:
         """Enqueue a tx job to be mined."""
         assert job not in self.tx_queue
@@ -229,7 +250,12 @@ class TxMiningManager:
         """Return best job for a miner."""
         if len(self.tx_queue) > 0:
             job = self.tx_queue[0]
-            job.status = JobStatus.MINING
+            assert job.status not in JobStatus.get_after_mining_states()
+            if job.status != JobStatus.MINING:
+                job.status = JobStatus.MINING
+                if job.timeout:
+                    loop = asyncio.get_event_loop()
+                    loop.call_later(job.timeout, self._job_timeout_if_possible, job)
             return job
         assert self.block_template is not None
         return MinerBlockJob(data=self.block_template.data, height=self.block_template.height)
