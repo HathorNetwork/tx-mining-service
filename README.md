@@ -7,6 +7,11 @@ It has two kinds of clients: users and miners. Users use it when sending new tra
 When there is no transaction to be mined, miners receive mining blocks to be mined.
 
 
+## API Docs
+
+Check out the full documentation in the OpenAPI Documentation in `api-docs.js`.
+
+
 ## How to run?
 
     python main.py https://node1.mainnet.hathor.network/

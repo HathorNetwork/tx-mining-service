@@ -4,8 +4,8 @@ Copyright (c) Hathor Labs and its affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
-
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
+
 from txstratum.api import App
 from txstratum.manager import TxMiningManager
 

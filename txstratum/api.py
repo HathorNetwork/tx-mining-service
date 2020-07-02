@@ -2,13 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import json
 from typing import TYPE_CHECKING, Optional
 
 from aiohttp import web
+
 from txstratum.commons import TokenCreationTransaction, Transaction
-from txstratum.jobs import MinerTxJob
+from txstratum.jobs import JobStatus, MinerTxJob
 from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
@@ -16,23 +16,23 @@ if TYPE_CHECKING:
 
 
 # Default maximum tx weight allowed to be mined in this server.
-MAX_TX_WEIGHT = 35
+MAX_TX_WEIGHT: float = 35.0
 
 
 # Tx timeout (seconds)
-TX_TIMEOUT = 20
+TX_TIMEOUT: float = 20.0
 
 
 class App:
     """API used to manage tx job."""
 
-    def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[int] = None,
-                 tx_timeout: Optional[int] = None):
+    def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
+                 tx_timeout: Optional[float] = None):
         """Init App."""
         super().__init__()
         self.manager = manager
-        self.max_tx_weight = max_tx_weight or MAX_TX_WEIGHT
-        self.tx_timeout = tx_timeout or TX_TIMEOUT
+        self.max_tx_weight: float = max_tx_weight or MAX_TX_WEIGHT
+        self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.app = web.Application()
         self.app.router.add_get('/health-check', self.health_check)
         self.app.router.add_get('/mining-status', self.mining_status)
@@ -79,9 +79,21 @@ class App:
         if tx.weight > self.max_tx_weight:
             return web.json_response({'error': 'tx-weight-is-too-high'}, status=400)
 
+        if 'timeout' not in data:
+            timeout = self.tx_timeout
+        else:
+            try:
+                timeout = min(self.tx_timeout, float(data['timeout']))
+            except ValueError:
+                return web.json_response({'error': 'invalid-timeout'}, status=400)
+
+            if timeout <= 0:
+                return web.json_response({'error': 'invalid-timeout'}, status=400)
+
         add_parents = data.get('add_parents', False)
         propagate = data.get('propagate', False)
-        job = MinerTxJob(tx_bytes, add_parents=add_parents, propagate=propagate, timeout=self.tx_timeout)
+
+        job = MinerTxJob(tx_bytes, add_parents=add_parents, propagate=propagate, timeout=timeout)
         success = self.manager.add_job(job)
         if not success:
             return web.json_response({'error': 'job-already-exists'}, status=400)
@@ -118,5 +130,7 @@ class App:
         - job-id: str, job identifier
         """
         job = self._get_job(request.query.get('job-id'))
+        if job.status in JobStatus.get_after_mining_states():
+            return web.json_response({'error': 'job-has-already-finished'}, status=400)
         self.manager.cancel_job(job)
         return web.json_response({'cancelled': True, 'job-id': job.uuid.hex()})

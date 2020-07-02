@@ -49,7 +49,7 @@ flake8: $(py_sources) $(py_tests)
 
 .PHONY: isort-check
 isort-check: $(py_sources) $(py_tests)
-	isort -ac -rc --check-only $^
+	isort --check-only $^
 
 .PHONY: check
 check: flake8 isort-check mypy

@@ -4,13 +4,13 @@ Copyright (c) Hathor Labs and its affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
-
 import asyncio
 import time
 import unittest
 from unittest.mock import MagicMock
 
 import numpy.random  # type: ignore
+
 from txstratum.jobs import MinerBlockJob
 from txstratum.protocol import StratumProtocol, SubmittedWork
 

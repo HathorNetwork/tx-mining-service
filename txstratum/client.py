@@ -2,12 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 from typing import Any, Dict, List, NamedTuple, Optional, cast
 from urllib.parse import urljoin
 
 from aiohttp import ClientSession
 from structlog import get_logger  # type: ignore
+
 from txstratum.commons import Block, TxOutput
 
 REQUIRED_HATHOR_API_VERSION = 'v1a'

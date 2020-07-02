@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import asyncio
 import logging
 import logging.config
@@ -12,6 +11,7 @@ from argparse import ArgumentParser, Namespace
 import structlog  # type: ignore
 from aiohttp import web
 from structlog import get_logger
+
 from txstratum.api import App
 from txstratum.manager import TxMiningManager
 

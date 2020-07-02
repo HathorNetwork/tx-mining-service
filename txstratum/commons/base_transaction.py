@@ -4,16 +4,16 @@ Copyright (c) Hathor Labs and its affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
-
 import base64
 import datetime
 import hashlib
-from _hashlib import HASH  # type: ignore
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from math import isfinite, log
 from struct import error as StructError, pack
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
+
+from _hashlib import HASH  # type: ignore
 
 from txstratum.commons.exceptions import InvalidOutputValue, WeightError
 from txstratum.commons.utils import int_to_bytes, unpack, unpack_len
@@ -74,7 +74,7 @@ class TxVersion(IntEnum):
         return cls(version)
 
     def get_cls(self) -> Type['BaseTransaction']:
-        from txstratum.commons import Block, Transaction, TokenCreationTransaction
+        from txstratum.commons import Block, TokenCreationTransaction, Transaction
 
         cls_map: Dict[TxVersion, Type[BaseTransaction]] = {
             TxVersion.REGULAR_BLOCK: Block,

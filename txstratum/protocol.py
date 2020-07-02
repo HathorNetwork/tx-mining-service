@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import asyncio
 import time
 import uuid
@@ -11,6 +10,7 @@ from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
 
 from structlog import get_logger  # type: ignore
+
 from txstratum.commons import sum_weights
 from txstratum.commons.utils import InvalidAddress, decode_address
 from txstratum.jobs import MinerBlockJob
@@ -124,8 +124,8 @@ class StratumProtocol(JSONRPCProtocol):
         if self.refresh_job_task:
             asyncio.ensure_future(self.refresh_job_task.stop())
 
-    def start_estimator(self) -> None:
-        """Start periodic estimator task."""
+    def start_periodic_tasks(self) -> None:
+        """Start periodic tasks."""
         if self.estimator_task is None:
             self.last_reduced = time.time()
             # Start estimator periodic task.
@@ -314,7 +314,7 @@ class StratumProtocol(JSONRPCProtocol):
         if self.current_job is not None:
             return
         self.started_at = time.time()
-        self.start_estimator()
+        self.start_periodic_tasks()
         self.manager.mark_connection_as_ready(self)
 
     def is_mining_block(self) -> bool:

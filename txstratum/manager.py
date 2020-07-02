@@ -2,19 +2,19 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import asyncio
 import time
 from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
 from structlog import get_logger  # type: ignore
+
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.utils import Periodic, calculate_expected_mining_time
 
 if TYPE_CHECKING:
-    from txstratum.client import HathorClient, BlockTemplate  # noqa: F401
+    from txstratum.client import BlockTemplate, HathorClient  # noqa: F401
 
 logger = get_logger()
 
@@ -203,6 +203,8 @@ class TxMiningManager:
 
     def cancel_job(self, job: MinerTxJob) -> None:
         """Cancel tx mining job."""
+        if job.status in JobStatus.get_after_mining_states():
+            raise ValueError('Job has already finished')
         job.status = JobStatus.CANCELLED
         self.tx_jobs.pop(job.uuid)
         self.tx_queue.remove(job)
@@ -211,7 +213,7 @@ class TxMiningManager:
 
     def _job_timeout_if_possible(self, job: MinerTxJob) -> None:
         """Stop mining a tx job because it timeout."""
-        if job.status != JobStatus.MINING:
+        if job.status in JobStatus.get_after_mining_states():
             return
         job.status = JobStatus.TIMEOUT
         self.tx_queue.remove(job)
@@ -228,6 +230,10 @@ class TxMiningManager:
         job.status = JobStatus.ENQUEUED
         job.expected_queue_time = sum(x.expected_mining_time for x in self.tx_queue)
         self.tx_queue.append(job)
+
+        if job.timeout:
+            loop = asyncio.get_event_loop()
+            loop.call_later(job.timeout, self._job_timeout_if_possible, job)
 
         if len(self.tx_queue) > 1:
             # If the queue is not empty, do nothing.
@@ -253,9 +259,6 @@ class TxMiningManager:
             assert job.status not in JobStatus.get_after_mining_states()
             if job.status != JobStatus.MINING:
                 job.status = JobStatus.MINING
-                if job.timeout:
-                    loop = asyncio.get_event_loop()
-                    loop.call_later(job.timeout, self._job_timeout_if_possible, job)
             return job
         assert self.block_template is not None
         return MinerBlockJob(data=self.block_template.data, height=self.block_template.height)

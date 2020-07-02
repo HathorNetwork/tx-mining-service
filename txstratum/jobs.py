@@ -75,7 +75,7 @@ class MinerTxJob(MinerJob):
     """Tx job."""
 
     def __init__(self, data: bytes, *, add_parents: bool = False, propagate: bool = False,
-                 timeout: Optional[int] = None):
+                 timeout: Optional[float] = None):
         """Init TxJob.
 
         add_parents: Add parents before mining tx.
@@ -86,7 +86,7 @@ class MinerTxJob(MinerJob):
 
         self.add_parents: bool = add_parents
         self.propagate: bool = propagate
-        self.timeout: Optional[int] = timeout
+        self.timeout: Optional[float] = timeout
 
         self.expected_queue_time: float = 0
         self.expected_mining_time: float = 0
@@ -167,6 +167,7 @@ class MinerTxJob(MinerJob):
                 'timestamp': self._tx.timestamp,
                 'weight': self._tx.weight,
             },
+            'timeout': self.timeout,
             'submitted_at': self.submitted_at,
             'total_time': self.total_time,
             'expected_queue_time': self.expected_queue_time,
