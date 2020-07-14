@@ -9,7 +9,7 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock, Mock
 
-from txstratum.client import HathorClient
+from txstratum.commons.client import HathorClient
 
 
 class ClientTestCase(unittest.TestCase):

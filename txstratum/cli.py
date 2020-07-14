@@ -33,7 +33,7 @@ def create_parser() -> ArgumentParser:
 
 def execute(args: Namespace) -> None:
     """Run the service according to the args."""
-    from txstratum.client import HathorClient
+    from txstratum.commons.client import HathorClient
 
     # Configure log.
     if os.path.exists(args.log_config):

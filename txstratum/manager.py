@@ -14,7 +14,7 @@ from txstratum.protocol import StratumProtocol
 from txstratum.utils import Periodic, calculate_expected_mining_time
 
 if TYPE_CHECKING:
-    from txstratum.client import BlockTemplate, HathorClient  # noqa: F401
+    from txstratum.commons.client import BlockTemplate, HathorClient  # noqa: F401
 
 logger = get_logger()
 

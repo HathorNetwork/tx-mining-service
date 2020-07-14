@@ -11,7 +11,7 @@ from collections import deque
 from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
-from txstratum.client import BlockTemplate, HathorClient
+from txstratum.commons.client import BlockTemplate, HathorClient
 from txstratum.jobs import MinerTxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
