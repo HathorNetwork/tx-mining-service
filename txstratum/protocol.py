@@ -127,11 +127,12 @@ class StratumProtocol(JSONRPCProtocol):
     def start_periodic_tasks(self) -> None:
         """Start periodic tasks."""
         if self.estimator_task is None:
-            self.last_reduced = time.time()
             # Start estimator periodic task.
             self.estimator_task = Periodic(self.estimator_loop, self.ESTIMATOR_LOOP_INTERVAL)
             asyncio.ensure_future(self.estimator_task.start())
-            # Start fresh job periodic task.
+
+        if self.refresh_job_task is None:
+            # Start refresh job periodic task.
             self.refresh_job_task = Periodic(self.refresh_job, self.JOB_UPDATE_INTERVAL)
             asyncio.ensure_future(self.refresh_job_task.start())
 
