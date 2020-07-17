@@ -5,7 +5,6 @@
 import asyncio
 import time
 import uuid
-from functools import reduce
 from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
 
@@ -28,6 +27,7 @@ class SubmittedWork(NamedTuple):
 
     timestamp: float
     weight: float
+    dt: float
 
 
 class StratumProtocol(JSONRPCProtocol):
@@ -61,6 +61,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         self.jobs: MaxSizeOrderedDict[bytes, 'MinerJob'] = MaxSizeOrderedDict(max=self.MAX_JOBS)
         self.current_job: Optional['MinerJob'] = None
+        self.started_current_block_at: Optional[float] = None
         self.current_weight: float = self.INITIAL_WEIGHT
         self.hashrate_ghs: float = 0.0
 
@@ -210,12 +211,16 @@ class StratumProtocol(JSONRPCProtocol):
         self.completed_jobs += 1
         job.submitted_at = now
         self.last_submit_at = now
-        self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight))
         self.send_result(msgid, 'ok')
 
-        # XXX Is it a good rule when mining txs?
+        if isinstance(job, MinerBlockJob):
+            assert self.started_current_block_at is not None
+            dt = job.submitted_at - self.started_current_block_at
+            self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight, dt))
+            self.started_current_block_at = None
+
         # Too many jobs too fast, increase difficulty out of caution (more than 10 submits within the last 10s)
-        if sum(1 for t, _ in self._submitted_work if now - t < 10) > 10:
+        if sum(1 for x in self._submitted_work if now - x.timestamp < 10) > 10:
             # Doubles the difficulty
             self.set_current_weight(self.current_weight + 1)
 
@@ -262,9 +267,12 @@ class StratumProtocol(JSONRPCProtocol):
         # window size
         if len(self._submitted_work) <= 1:
             return
-        delta = self._submitted_work[-1].timestamp - self._submitted_work[0].timestamp
-        # total logwork (considering the highest hash only)
-        logwork = reduce(lambda w1, w2: sum_weights(w1, w2), (w for (_, w) in self._submitted_work))
+        # delta and total logwork (considering the highest hash only)
+        delta = 0.0
+        logwork = 0.0
+        for x in self._submitted_work:
+            delta += x.dt
+            logwork = sum_weights(logwork, x.weight)
         # calculate hashrate in TH/s
         self.hashrate_ghs = 2**(logwork - log2(delta) - 30)
         self.set_current_weight(logwork - log2(delta) + log2(self.TARGET_JOB_TIME))
@@ -342,6 +350,12 @@ class StratumProtocol(JSONRPCProtocol):
         # Update timestamp.
         if self._update_job_timestamp:
             job.update_timestamp()
+
+        # Update when the miner started mining a block.
+        if not isinstance(job, MinerBlockJob):
+            self.started_current_block_at = None
+        elif self.started_current_block_at is None:
+            self.started_current_block_at = time.time()
 
         # Add job to the job list and set it as current job
         self.current_job = job

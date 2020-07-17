@@ -38,7 +38,7 @@ class DifficultyTestCase(unittest.TestCase):
 
     def test_estimator_one_work(self):
         now = time.time()
-        self.protocol._submitted_work.append(SubmittedWork(now, 25.0))
+        self.protocol._submitted_work.append(SubmittedWork(now, 25.0, 8))
         self.loop.run_until_complete(self.protocol.estimator_loop())
 
     def test_estimator_fixed_weight(self):
@@ -49,7 +49,7 @@ class DifficultyTestCase(unittest.TestCase):
             geometric_p = 2**(-weight)
             trials = numpy.random.geometric(geometric_p)
             dt = 1.0 * trials / hashpower
-            self.protocol._submitted_work.append(SubmittedWork(now + dt, weight))
+            self.protocol._submitted_work.append(SubmittedWork(now + dt, weight, dt))
             self.loop.run_until_complete(self.protocol.estimator_loop())
             print('!! hashrate_ghs:', self.protocol.hashrate_ghs)
             now += dt
