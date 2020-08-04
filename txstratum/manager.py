@@ -34,8 +34,8 @@ class TxMiningManager:
     When a new tx arrives, manager calls `miner.update_job()`.
     """
 
-    BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0
-    TX_CLEAN_UP_INTERVAL = 300.0
+    BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0  # seconds
+    TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
     def __init__(self, backend: 'HathorClient'):
         """Init TxMiningManager with backend."""
@@ -54,6 +54,7 @@ class TxMiningManager:
         self.txs_solved: int = 0
         self.blocks_found: int = 0
         self.txs_timeout: int = 0
+        self.block_template_error: int = 0
 
     def __call__(self) -> StratumProtocol:
         """Return an instance of StratumProtocol for a new connection."""
@@ -136,6 +137,8 @@ class TxMiningManager:
         except Exception:
             # XXX What should we do?!
             self.block_template = None
+            self.block_template_error += 1
+            self.log.exception('Error updating block template')
             return
         self.block_template_updated_at = time.time()
         self.block_template = block_template
@@ -148,12 +151,17 @@ class TxMiningManager:
             if isinstance(protocol.current_job, MinerBlockJob):
                 self.update_miner_job(protocol)
 
+    def get_total_hashrate_ghs(self) -> float:
+        """Return total hashrate (Gh/s)."""
+        return sum(p.hashrate_ghs or 0 for p in self.miners.values())
+
     def status(self) -> Dict[Any, Any]:
         """Return status dict with useful metrics for use in Status API."""
         miners = [p.status() for p in self.miners.values()]
-        total_hashrate_ghs = sum(p.hashrate_ghs or 0 for p in self.miners.values())
+        total_hashrate_ghs = self.get_total_hashrate_ghs()
         return {
             'miners': miners,
+            'miners_count': len(miners),
             'total_hashrate_ghs': total_hashrate_ghs,
             'started_at': self.started_at,
             'txs_solved': self.txs_solved,
@@ -162,6 +170,7 @@ class TxMiningManager:
             'uptime': self.uptime,
             'tx_queue': len(self.tx_queue),
             'tx_jobs': [job.to_dict() for job in self.tx_jobs.values()],
+            'block_template_error': self.block_template_error,
             'block_template': self.block_template.to_dict() if self.block_template else None,
         }
 
