@@ -19,6 +19,7 @@ colorama = "*"
 aiohttp = "*"
 base58 = "*"
 structlog = "*"
+prometheus-client = "*"
 
 [requires]
 python_version = "3.8"

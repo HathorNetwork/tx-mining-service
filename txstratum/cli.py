@@ -27,6 +27,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--log-config', help='Config file for logging', default='log.conf')
     parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=int, default=None)
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
+    parser.add_argument('--prometheus', help='Path to export metrics for Prometheus', type=str, default=None)
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
     return parser
 
@@ -56,6 +57,11 @@ def execute(args: Namespace) -> None:
     loop.run_until_complete(backend.start())
     loop.run_until_complete(manager.start())
     server = loop.run_until_complete(loop.create_server(manager, '0.0.0.0', args.stratum_port))
+
+    if args.prometheus:
+        from txstratum.prometheus import PrometheusExporter
+        metrics = PrometheusExporter(manager, args.prometheus)
+        metrics.start()
 
     api_app = App(manager, max_tx_weight=args.max_tx_weight, tx_timeout=args.tx_timeout)
     logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout)
