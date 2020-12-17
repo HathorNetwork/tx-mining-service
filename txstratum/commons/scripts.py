@@ -10,9 +10,11 @@ import struct
 from enum import IntEnum
 from typing import Any, Dict, List, Match, Optional, Pattern, Type, Union
 
-from txstratum.commons.conf import settings
+from txstratum.commons.conf import HathorSettings
 from txstratum.commons.exceptions import ScriptError
 from txstratum.commons.utils import get_address_b58_from_public_key_hash, get_address_b58_from_redeem_script_hash
+
+settings = HathorSettings()
 
 
 def re_compile(pattern: str) -> Pattern[bytes]:

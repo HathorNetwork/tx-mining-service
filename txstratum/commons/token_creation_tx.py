@@ -18,10 +18,12 @@ from struct import error as StructError, pack
 from typing import Tuple
 
 from txstratum.commons.base_transaction import TxInput, TxOutput
-from txstratum.commons.conf import settings
+from txstratum.commons.conf import HathorSettings
 from txstratum.commons.exceptions import TransactionDataError
 from txstratum.commons.transaction import Transaction
 from txstratum.commons.utils import clean_token_string, int_to_bytes, unpack, unpack_len
+
+settings = HathorSettings()
 
 # Version (H), inputs len (B), outputs len (B)
 _FUNDS_FORMAT_STRING = '!HBB'

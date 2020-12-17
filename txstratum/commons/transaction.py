@@ -11,9 +11,11 @@ from struct import pack
 from typing import List
 
 from txstratum.commons.base_transaction import TX_HASH_SIZE, BaseTransaction, TxInput, TxOutput
-from txstratum.commons.conf import settings
+from txstratum.commons.conf import HathorSettings
 from txstratum.commons.exceptions import InvalidOutputValue, InvalidToken
 from txstratum.commons.utils import unpack, unpack_len
+
+settings = HathorSettings()
 
 # Version (H), token uids len (B) and inputs len (B), outputs len (B).
 _FUNDS_FORMAT_STRING = '!HBBB'

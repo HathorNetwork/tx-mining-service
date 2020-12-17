@@ -12,9 +12,6 @@ import structlog  # type: ignore
 from aiohttp import web
 from structlog import get_logger
 
-from txstratum.api import App
-from txstratum.manager import TxMiningManager
-
 logger = get_logger()
 
 
@@ -28,13 +25,16 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=int, default=None)
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
     parser.add_argument('--prometheus', help='Path to export metrics for Prometheus', type=str, default=None)
+    parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
     return parser
 
 
 def execute(args: Namespace) -> None:
     """Run the service according to the args."""
+    from txstratum.api import App
     from txstratum.commons.client import HathorClient
+    from txstratum.manager import TxMiningManager
 
     # Configure log.
     if os.path.exists(args.log_config):
@@ -73,6 +73,8 @@ def execute(args: Namespace) -> None:
     try:
         logger.info('Stratum Server running at 0.0.0.0:{}...'.format(args.stratum_port))
         logger.info('TxMining API running at 0.0.0.0:{}...'.format(args.api_port))
+        if args.testnet:
+            logger.info('Running with testnet config file')
         loop.run_forever()
     except KeyboardInterrupt:
         logger.info('Stopping...')
@@ -87,4 +89,9 @@ def main() -> None:
     """Run the service using the cmdline."""
     parser = create_parser()
     args = parser.parse_args()
+
+    if args.testnet:
+        if not os.environ.get('TXMINING_CONFIG_FILE'):
+            os.environ['TXMINING_CONFIG_FILE'] = 'txstratum.commons.conf.testnet'
+
     execute(args)
