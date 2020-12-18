@@ -102,14 +102,14 @@ class App:
     def _get_job(self, uuid_hex: Optional[str]) -> MinerTxJob:
         """Return job from uuid_hex. It raises web exceptions for common issues."""
         if not uuid_hex:
-            raise web.HTTPBadRequest(body=json.dumps({'error': 'missing-job-id'}), content_type='application/json')
+            raise web.HTTPBadRequest(body=json.dumps({'error': 'missing-job-id'}).encode('ascii'), content_type='application/json')
         try:
             uuid = bytes.fromhex(uuid_hex)
         except ValueError:
-            raise web.HTTPBadRequest(body=json.dumps({'error': 'invalid-uuid'}), content_type='application/json')
+            raise web.HTTPBadRequest(body=json.dumps({'error': 'invalid-uuid'}).encode('ascii'), content_type='application/json')
         job = self.manager.get_job(uuid)
         if job is None:
-            raise web.HTTPNotFound(body=json.dumps({'error': 'job-not-found'}), content_type='application/json')
+            raise web.HTTPNotFound(body=json.dumps({'error': 'job-not-found'}).encode('ascii'), content_type='application/json')
         return job
 
     async def job_status(self, request: web.Request) -> web.Response:
