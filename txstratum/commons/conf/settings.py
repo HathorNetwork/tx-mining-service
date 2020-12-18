@@ -8,15 +8,15 @@ LICENSE file in the root directory of this source tree.
 from typing import NamedTuple
 
 
-class HathorMainnetSettings(NamedTuple):
+class HathorSettings(NamedTuple):
     # Name of the network: "mainnet", "testnet-alpha", "testnet-bravo", ...
-    NETWORK_NAME: str = 'mainnet'
+    NETWORK_NAME: str
 
     # Version byte of the address in P2PKH
-    P2PKH_VERSION_BYTE: bytes = b'\x28'
+    P2PKH_VERSION_BYTE: bytes
 
     # Version byte of the address in MultiSig
-    MULTISIG_VERSION_BYTE: bytes = b'\x64'
+    MULTISIG_VERSION_BYTE: bytes
 
     # HTR Token UID
     HATHOR_TOKEN_UID: bytes = b'\x00'
@@ -32,6 +32,3 @@ class HathorMainnetSettings(NamedTuple):
 
     # Symbol of the Hathor token
     HATHOR_TOKEN_SYMBOL: str = 'HTR'
-
-
-settings = HathorMainnetSettings()

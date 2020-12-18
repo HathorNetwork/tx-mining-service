@@ -11,7 +11,9 @@ from typing import Any, Tuple
 
 import base58
 
-from txstratum.commons.conf import settings
+from txstratum.commons.conf import HathorSettings
+
+settings = HathorSettings()
 
 
 def int_to_bytes(number: int, size: int, signed: bool = False) -> bytes:
