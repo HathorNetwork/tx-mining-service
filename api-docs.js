@@ -103,43 +103,38 @@ const apiDoc = {
     '/submit-job': {
       post: {
         summary: 'Get the status of a tx job',
-        parameters: [
-          {
-            name: 'tx',
-            'in': 'body',
-            description: 'Hex dump of the transaction',
-            required: true,
-            schema: {
-              type: 'string',
-            },
-          }, {
-            name: 'propagate',
-            'in': 'body',
-            description: 'Indicate that the server should propagate the transaction after it has been resolved.',
-            required: false,
-            schema: {
-              type: 'boolean',
-              default: false,
-            },
-          }, {
-            name: 'add_parents',
-            'in': 'body',
-            description: 'Indicate that the server should add parents to the transaction before it is resolved.',
-            required: false,
-            schema: {
-              type: 'boolean',
-              default: false,
-            },
-          }, {
-            name: 'timeout',
-            'in': 'body',
-            description: 'Set the tx mining timeout.',
-            required: false,
-            schema: {
-              type: 'number',
-            },
-          },
-        ],
+        requestBody: {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "properties"
+                ],
+                "properties": {
+                  "tx": {
+                    "type": "string",
+                    "description": "Hex dump of the transaction"
+                  },
+                  "propagate": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Indicate that the server should propagate the transaction after it has been resolved."
+                  },
+                  "add_parents": {
+                    "description": "Indicate that the server should add parents to the transaction before it is resolved.",
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "timeout": {
+                    "description": "Set the tx mining timeout.",
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
         responses: {
           200: {
             description: 'Success',
