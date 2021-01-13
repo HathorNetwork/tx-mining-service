@@ -1,0 +1,252 @@
+openapi: 3.0.0
+servers:
+  - url: 'http://localhost:8080'
+info:
+  title: tx-mining-service API
+  description: This service is used to resolving transactions before propagating them into the network
+  version: 0.1.0
+produces:
+  - application/json
+paths:
+  /health-check:
+    get:
+      summary: Check if service is up and running
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              examples:
+                success:
+                  summary: Success
+                  value:
+                    success: true
+  /mining-status:
+    get:
+      summary: General information and statistics about mining
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              examples:
+                success:
+                  summary: Success
+                  value:
+                    miners:
+                      - id: d8bcc413-c455-41ae-a3fd-d9dd16698213
+                        hashrate_ghs: 9.056585341661913
+                        weight: 37.08585780049017
+                        miner_address: H86LWj6FCoVLW2J4na5JiBYoxN9co4oYpv
+                        job_type: block
+                        started_at: 1593687851.7579956
+                        last_submit_at: 1593718429.9957948
+                        uptime: 30580.546285629272
+                        completed_jobs: 2132
+                        txs_solved: 0
+                        blocks_found: 0
+                    total_hashrate_ghs: 9.056585341661913
+                    started_at: 1593501599.021218
+                    txs_solved: 2
+                    txs_timeout: 0
+                    blocks_found: 1
+                    uptime: 216833.2830736637
+                    tx_queue: 1
+                    tx_jobs:
+                      - job_id: 020a50bc5f4200a682b204dd49e85717ca67dc04b0b4d67d4109b016766f7a83
+                        status: mining
+                        message: ''
+                        created_at: 1593718551.7928894
+                        tx:
+                          nonce: null
+                          parents:
+                            - 00000000c8897c0cf45661d75ab2b596191ae1150b0e0aa786408ca05a0891f0
+                            - 000000007ed6f7e1bde59ff741d073292453011301e5f9165b0af6f20e753967
+                          timestamp: 1593718554
+                          weight: 16.857568569073248
+                        submitted_at: null
+                        total_time: null
+                        expected_queue_time: 0
+                        expected_mining_time: 0.000037346966650488276
+                        expected_total_time: 0.000037346966650488276
+                    block_template:
+                      data: 00000100001900000000404e74e4c33549b65efe369e0300000000000000082e270c460c12c725152a8cce48a1d5a46e17625362f9670a00000000c8897c0cf45661d75ab2b596191ae1150b0e0aa786408ca05a0891f0000000007ed6f7e1bde59ff741d073292453011301e5f9165b0af6f20e7539670000000000000000000000000000000000
+                      height: 518721
+  /submit-job:
+    post:
+      summary: Get the status of a tx job
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - properties
+              properties:
+                tx:
+                  type: string
+                  description: Hex dump of the transaction
+                propagate:
+                  type: boolean
+                  default: false
+                  description: Indicate that the server should propagate the transaction after it has been resolved.
+                add_parents:
+                  description: Indicate that the server should add parents to the transaction before it is resolved.
+                  type: boolean
+                  default: false
+                timeout:
+                  description: Set the tx mining timeout.
+                  type: number
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              examples:
+                success:
+                  summary: Success
+                  value:
+                    job_id: 020a50bc5f4200a682b204dd49e85717ca67dc04b0b4d67d4109b016766f7a83
+                    status: pending
+                    message: ''
+                    created_at: 1593719576.8820157
+                    tx:
+                      nonce: null
+                      parents: []
+                      timestamp: 1591913653
+                      weight: 16.857568569073248
+                    submitted_at: null
+                    total_time: null
+                    expected_queue_time: 0
+                    expected_mining_time: 0.00003305791280944046
+                    expected_total_time: 0.00003305791280944046
+        '400':
+          description: Bad requests
+          content:
+            application/json:
+              examples:
+                cannot-decode-json:
+                  summary: Cannot decode json in body
+                  value:
+                    error: cannot-decode-json
+                json-must-be-an-object:
+                  summary: Json in body must an object
+                  value:
+                    error: json-must-be-an-object
+                missing-tx:
+                  summary: Missing tx in body
+                  value:
+                    error: missing-tx
+                invalid-tx:
+                  summary: Invalid tx. It must be either a Transaction or a TokenCreationTransaction
+                  value:
+                    error: invalid-tx
+                tx-weight-is-too-high:
+                  summary: Tx weight is above the maximum allowed weight
+                  value:
+                    error: tx-weight-is-too-high
+                job-already-exists:
+                  summary: Job already exists.
+                  value:
+                    error: job-already-exists
+  /job-status:
+    get:
+      summary: Get the status of a tx job
+      parameters:
+        - name: job-id
+          in: query
+          description: Job id in hexadecimal
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              examples:
+                success:
+                  summary: Success
+                  value:
+                    job_id: 020a50bc5f4200a682b204dd49e85717ca67dc04b0b4d67d4109b016766f7a83
+                    status: done
+                    message: ''
+                    created_at: 1593718551.7928894
+                    tx:
+                      nonce: ba60bfcb
+                      parents:
+                        - 00000000c8897c0cf45661d75ab2b596191ae1150b0e0aa786408ca05a0891f0
+                        - 000000007ed6f7e1bde59ff741d073292453011301e5f9165b0af6f20e753967
+                      timestamp: 1593718560
+                      weight: 16.857568569073248
+                    submitted_at: 1593718561.258719
+                    total_time: 9.465829610824585
+                    expected_queue_time: 0
+                    expected_mining_time: 0.000037346966650488276
+                    expected_total_time: 0.000037346966650488276
+        '400':
+          description: Bad requests
+          content:
+            application/json:
+              examples:
+                missing-job-id:
+                  summary: Missing job-id parameter
+                  value:
+                    error: missing-job-id
+                invalid-uuid:
+                  summary: job-id in the wrong format
+                  value:
+                    error: invalid-uuid
+        '404':
+          description: Not found
+          content:
+            application/json:
+              examples:
+                job-not-found:
+                  summary: Job not found
+                  value:
+                    error: job-not-found
+  /cancel-job:
+    post:
+      summary: Cancel a tx-job
+      parameters:
+        - name: job-id
+          in: query
+          description: Job id in hexadecimal
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              examples:
+                success:
+                  summary: Success
+                  value:
+                    job-id: 020a50bc5f4200a682b204dd49e85717ca67dc04b0b4d67d4109b016766f7a83
+                    cancelled: true
+        '400':
+          description: Bad requests
+          content:
+            application/json:
+              examples:
+                missing-job-id:
+                  summary: Missing job-id parameter
+                  value:
+                    error: missing-job-id
+                invalid-uuid:
+                  summary: job-id in the wrong format
+                  value:
+                    error: invalid-uuid
+        '404':
+          description: Not found
+          content:
+            application/json:
+              examples:
+                job-not-found:
+                  summary: Job not found
+                  value:
+                    error: job-not-found
+
