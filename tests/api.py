@@ -39,7 +39,7 @@ TOKEN_CREATION_TX_NONCE = '01ff7369'
 
 class AppTestCase(AioHTTPTestCase):
     async def get_application(self):
-        self.manager = TxMiningManager(backend=None)
+        self.manager = TxMiningManager(backend=None, address=None)
         app = App(self.manager)
         return app.app
 

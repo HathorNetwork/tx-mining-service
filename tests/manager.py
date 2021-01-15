@@ -84,7 +84,7 @@ class HathorClientTest(HathorClient):
     async def stop(self):
         pass
 
-    async def get_block_template(self) -> BlockTemplate:
+    async def get_block_template(self, address: Optional[str] = None) -> BlockTemplate:
         return self._block_templates[self._current_index]
 
     async def get_tx_parents(self) -> List[bytes]:
@@ -100,9 +100,11 @@ class ManagerTestCase(unittest.TestCase):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
+        address = 'HC7w4j7mPet49BBN5a2An3XUiPvK6C1TL7'
+
         self.client = HathorClientTest(server_url='')
         self.loop.run_until_complete(self.client.start())
-        self.manager = TxMiningManager(backend=self.client)
+        self.manager = TxMiningManager(backend=self.client, address=address)
         self.loop.run_until_complete(self.manager.start())
         self.assertTrue(len(self.manager.block_template) > 0)
 
@@ -114,6 +116,21 @@ class ManagerTestCase(unittest.TestCase):
             pass
         future = asyncio.ensure_future(_fn())
         self.loop.run_until_complete(future)
+
+    def test_invalid_mining_address(self):
+        from txstratum.commons.exceptions import InvalidAddress
+        address = 'HC7w4j7mPet49BBN5a2An3XUiPvK6C1TL7'
+
+        invalid_addresses = [
+            ('Invalid base58', address[:-1] + 'I'),  # No 'I' in base58 symbols.
+            ('Invalid checksum', address[:-1] + 'A'),
+            ('Invalid size (smaller)', address[:-1]),
+            ('Invalid size (bigger)', address + '7'),
+        ]
+        for idx, (cause, invalid_address) in enumerate(invalid_addresses):
+            with self.assertRaises(InvalidAddress):
+                print('Address #{}: {} ({})'.format(idx, cause, invalid_address))
+                TxMiningManager(backend=self.client, address=invalid_address)
 
     def test_miner_connect_disconnect(self):
         conn = StratumProtocol(self.manager)
@@ -247,6 +264,17 @@ class ManagerTestCase(unittest.TestCase):
         conn.method_subscribe(params=params, msgid=None)
         conn.method_authorize(params=None, msgid=None)
         return conn
+
+    def test_miner_invalid_address(self):
+        conn = StratumProtocol(self.manager)
+        conn.send_error = MagicMock(return_value=None)
+
+        transport = Mock()
+        conn.connection_made(transport=transport)
+
+        params = {'address': 'X'}
+        conn.method_subscribe(params=params, msgid=None)
+        conn.send_error.assert_called_once_with(None, conn.INVALID_ADDRESS)
 
     def test_miner_only_blocks_submit_failed_1(self):
         conn = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')

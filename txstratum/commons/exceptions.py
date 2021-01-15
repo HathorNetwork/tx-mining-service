@@ -19,6 +19,10 @@ class HathorError(Exception):
     """General error class"""
 
 
+class InvalidAddress(HathorError):
+    """Address is invalid"""
+
+
 class TxValidationError(HathorError):
     """Base class for tx validation errors"""
 

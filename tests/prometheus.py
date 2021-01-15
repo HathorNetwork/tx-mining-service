@@ -15,7 +15,7 @@ from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
 
 class ManagerTestCase(unittest.TestCase):
     def setUp(self):
-        self.manager = TxMiningManager(backend=None)
+        self.manager = TxMiningManager(backend=None, address=None)
         self.tmpdir = tempfile.mkdtemp()
 
     def tearDown(self):

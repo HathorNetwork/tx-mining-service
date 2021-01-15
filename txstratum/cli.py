@@ -26,6 +26,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
     parser.add_argument('--prometheus', help='Path to export metrics for Prometheus', type=str, default=None)
     parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
+    parser.add_argument('--address', help='Mining address for blocks', type=str, default=None)
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
     return parser
 
@@ -52,7 +53,8 @@ def execute(args: Namespace) -> None:
 
     backend = HathorClient(args.backend)
     manager = TxMiningManager(
-        backend=backend
+        backend=backend,
+        address=args.address,
     )
     loop.run_until_complete(backend.start())
     loop.run_until_complete(manager.start())
