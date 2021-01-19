@@ -6,7 +6,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, cast
 from urllib.parse import urljoin
 
 from aiohttp import ClientSession
-from structlog import get_logger  # type: ignore
+from structlog import get_logger
 
 from txstratum.commons import Block, TxOutput
 

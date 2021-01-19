@@ -1,0 +1,38 @@
+# Copyright (c) Hathor Labs and its affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+[tool.poetry]
+name = "tx-mining-service"
+version = "0.1.0"
+description = "Service to mine transactions"
+authors = ["Hathor Team <contact@hathor.network>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://hathor.network/"
+repository = "https://github.com/HathorNetwork/tx-mining-service/"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+ConfigArgParse = "^1.2.3"
+colorama = "^0.4.4"
+aiohttp = "^3.7.3"
+base58 = "^2.1.0"
+structlog = "^20.2.0"
+prometheus-client = "^0.9.0"
+idna_ssl = "^1.1.0"
+
+[tool.poetry.dev-dependencies]
+flake8 = "^3.8.4"
+flake8-docstrings = "^1.5.0"
+isort = "^5.7.0"
+mypy = "^0.790"
+numpy = "^1.19.5"
+pytest = "^6.2.1"
+pytest-aiohttp = "^0.3.0"
+pytest-cov = "^2.11.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

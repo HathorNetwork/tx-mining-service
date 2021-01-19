@@ -8,7 +8,7 @@ import logging.config
 import os
 from argparse import ArgumentParser, Namespace
 
-import structlog  # type: ignore
+import structlog
 from aiohttp import web
 from structlog import get_logger
 
@@ -39,7 +39,7 @@ def execute(args: Namespace) -> None:
     # Configure log.
     if os.path.exists(args.log_config):
         logging.config.fileConfig(args.log_config)
-        from structlog.stdlib import LoggerFactory  # type: ignore
+        from structlog.stdlib import LoggerFactory
         structlog.configure(logger_factory=LoggerFactory())
         logger.info('tx-mining-service', backend=args.backend)
         logger.info('Configuring log...', log_config=args.log_config)

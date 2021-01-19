@@ -8,7 +8,7 @@ import uuid
 from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
 
-from structlog import get_logger  # type: ignore
+from structlog import get_logger
 
 from txstratum.commons import sum_weights
 from txstratum.commons.utils import InvalidAddress, decode_address
