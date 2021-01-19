@@ -14,6 +14,8 @@ Check out the full documentation in the OpenAPI Documentation in `api-docs.js`.
 
 ## How to run?
 
+To install dependencies, run `poetry install`.
+
     python main.py https://node1.mainnet.hathor.network/
 
 

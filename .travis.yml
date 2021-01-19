@@ -3,12 +3,12 @@ python:
   - "3.6"
 
 install:
-  - pip install pipenv
-  - pipenv install --ignore-pipfile --deploy --system --dev
+  - pip install poetry
+  - poetry install -n --no-root
 
 jobs:
   include:
     - stage: check
-      script: make check
+      script: poetry run make check
     - stage: tests
-      script: make tests
+      script: poetry run make tests
