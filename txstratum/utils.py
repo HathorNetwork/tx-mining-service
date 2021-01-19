@@ -9,7 +9,7 @@ from collections import OrderedDict, namedtuple
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Generic, Optional, Tuple, TypeVar, Union, cast
 
-from structlog import get_logger  # type: ignore
+from structlog import get_logger
 
 if TYPE_CHECKING:
     from txstratum.commons import BaseTransaction

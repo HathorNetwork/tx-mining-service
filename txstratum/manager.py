@@ -7,7 +7,7 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
-from structlog import get_logger  # type: ignore
+from structlog import get_logger
 
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob
 from txstratum.protocol import StratumProtocol
