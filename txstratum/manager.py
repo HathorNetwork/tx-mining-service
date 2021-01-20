@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
 from structlog import get_logger
 
+from txstratum.commons.utils import decode_address
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.utils import Periodic, calculate_expected_mining_time
@@ -37,10 +38,15 @@ class TxMiningManager:
     BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0  # seconds
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
-    def __init__(self, backend: 'HathorClient'):
+    def __init__(self, backend: 'HathorClient', address: Optional[str] = None):
         """Init TxMiningManager with backend."""
+        if address is not None:
+            # Validate address. If the address is invalid, it raises an InvalidAddress exception.
+            decode_address(address)
+
         self.log = logger.new()
         self.backend: 'HathorClient' = backend
+        self.address = address
         self.started_at: float = 0
         self.tx_jobs: Dict[bytes, MinerTxJob] = {}
         self.tx_queue: Deque[MinerTxJob] = deque()
@@ -133,7 +139,7 @@ class TxMiningManager:
         """Update block template. It is periodically called."""
         self.log.debug('Updating block template...')
         try:
-            block_template = await self.backend.get_block_template()
+            block_template = await self.backend.get_block_template(address=self.address)
         except Exception:
             # XXX What should we do?!
             self.block_template = None

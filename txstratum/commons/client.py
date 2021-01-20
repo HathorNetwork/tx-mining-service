@@ -73,10 +73,13 @@ class HathorClient:
             major, minor, patch = ver.split('.')
             return HathorVersion(int(major), int(minor), int(patch))
 
-    async def get_block_template(self) -> BlockTemplate:
+    async def get_block_template(self, address: Optional[str] = None) -> BlockTemplate:
         """Return a block template."""
         assert self._session is not None
-        async with self._session.get(self._get_url('get_block_template')) as resp:
+        params = {}
+        if address is not None:
+            params['address'] = address
+        async with self._session.get(self._get_url('get_block_template'), params=params) as resp:
             data = await resp.json()
 
             if data.get('error'):

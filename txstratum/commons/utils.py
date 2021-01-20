@@ -12,6 +12,7 @@ from typing import Any, Tuple
 import base58
 
 from txstratum.commons.conf import HathorSettings
+from txstratum.commons.exceptions import InvalidAddress
 
 settings = HathorSettings()
 
@@ -27,10 +28,6 @@ def unpack(fmt: str, buf: bytes) -> Any:
 
 def unpack_len(n: int, buf: bytes) -> Tuple[bytes, bytes]:
     return buf[:n], buf[n:]
-
-
-class InvalidAddress(Exception):
-    """Raised when decoding an invalid address."""
 
 
 def get_checksum(address_bytes: bytes) -> bytes:

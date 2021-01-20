@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optiona
 from structlog import get_logger
 
 from txstratum.commons import sum_weights
-from txstratum.commons.utils import InvalidAddress, decode_address
+from txstratum.commons.exceptions import InvalidAddress
+from txstratum.commons.utils import decode_address
 from txstratum.jobs import MinerBlockJob
 from txstratum.utils import JSONRPCError, JSONRPCId, JSONRPCProtocol, MaxSizeOrderedDict, Periodic
 
