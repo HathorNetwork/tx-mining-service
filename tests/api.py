@@ -6,8 +6,10 @@ LICENSE file in the root directory of this source tree.
 """
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 
-from txstratum.api import App
+import txstratum.time
+from txstratum.api import MAX_TIMESTAMP_DELTA, MAX_TX_WEIGHT, App
 from txstratum.manager import TxMiningManager
+from txstratum.utils import tx_or_block_from_bytes
 
 from .tx_examples import INVALID_TX_DATA
 
@@ -37,6 +39,13 @@ TOKEN_CREATION_TX_DATA = bytes.fromhex(
     'a34f40888d79c25bce74421646e732dc01ff7369'
 )
 TOKEN_CREATION_TX_NONCE = '01ff7369'
+
+
+def update_timestamp(tx_bytes: bytes, *, delta: int = 0) -> bytes:
+    """Update timestamp to current timestamp."""
+    tx = tx_or_block_from_bytes(tx_bytes)
+    tx.timestamp = int(txstratum.time.time()) + delta
+    return bytes(tx)
 
 
 class AppTestCase(AioHTTPTestCase):
@@ -130,6 +139,56 @@ class AppTestCase(AioHTTPTestCase):
         self.assertEqual({'error': 'invalid-tx'}, data)
 
     @unittest_run_loop
+    async def test_submit_job_invalid_tx_timestamp1(self):
+        tx_hex = update_timestamp(TX1_DATA, delta=MAX_TIMESTAMP_DELTA + 1).hex()
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({'error': 'tx-timestamp-invalid'}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_invalid_tx_timestamp2(self):
+        tx_hex = update_timestamp(TX1_DATA, delta=-(MAX_TIMESTAMP_DELTA + 1)).hex()
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({'error': 'tx-timestamp-invalid'}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_invalid_tx_weight(self):
+        tx_bytes = update_timestamp(TX1_DATA)
+        tx = tx_or_block_from_bytes(tx_bytes)
+        tx.weight = MAX_TX_WEIGHT + 0.1
+        tx_bytes = bytes(tx)
+        tx_hex = tx_bytes.hex()
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({'error': 'tx-weight-is-too-high'}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_invalid_timeout(self):
+        json_data = {
+            'tx': update_timestamp(TX1_DATA).hex(),
+            'timeout': 'x',
+        }
+        resp = await self.client.request('POST', '/submit-job', json=json_data)
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({'error': 'invalid-timeout'}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_negative_timeout(self):
+        json_data = {
+            'tx': update_timestamp(TX1_DATA).hex(),
+            'timeout': -1,
+        }
+        resp = await self.client.request('POST', '/submit-job', json=json_data)
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({'error': 'invalid-timeout'}, data)
+
+    @unittest_run_loop
     async def test_cancel_job_missing_job_id(self):
         resp = await self.client.request('POST', '/cancel-job')
         data = await resp.json()
@@ -152,7 +211,7 @@ class AppTestCase(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_submit_job_success(self):
-        resp = await self.client.request('POST', '/submit-job', json={'tx': TX1_DATA.hex()})
+        resp = await self.client.request('POST', '/submit-job', json={'tx': update_timestamp(TX1_DATA).hex()})
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
 
@@ -168,7 +227,8 @@ class AppTestCase(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_submit_job_success_token_creation(self):
-        resp = await self.client.request('POST', '/submit-job', json={'tx': TOKEN_CREATION_TX_DATA.hex()})
+        tx_hex = update_timestamp(TOKEN_CREATION_TX_DATA).hex()
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
 

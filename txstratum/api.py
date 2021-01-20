@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
 import json
 from typing import TYPE_CHECKING, Optional
 
 from aiohttp import web
 
+import txstratum.time
 from txstratum.commons import TokenCreationTransaction, Transaction
 from txstratum.commons.exceptions import TxValidationError
 from txstratum.jobs import JobStatus, MinerTxJob
@@ -20,6 +22,10 @@ if TYPE_CHECKING:
 MAX_TX_WEIGHT: float = 35.0
 
 
+# Maximum difference between tx timestamp and current time.
+MAX_TIMESTAMP_DELTA: int = 300
+
+
 # Tx timeout (seconds)
 TX_TIMEOUT: float = 20.0
 
@@ -28,11 +34,12 @@ class App:
     """API used to manage tx job."""
 
     def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
-                 tx_timeout: Optional[float] = None):
+                 max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None):
         """Init App."""
         super().__init__()
         self.manager = manager
         self.max_tx_weight: float = max_tx_weight or MAX_TX_WEIGHT
+        self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.app = web.Application()
         self.app.router.add_get('/health-check', self.health_check)
@@ -79,6 +86,9 @@ class App:
 
         if tx.weight > self.max_tx_weight:
             return web.json_response({'error': 'tx-weight-is-too-high'}, status=400)
+
+        if abs(tx.timestamp - txstratum.time.time()) > self.max_timestamp_delta:
+            return web.json_response({'error': 'tx-timestamp-invalid'}, status=400)
 
         if 'timeout' not in data:
             timeout = self.tx_timeout
