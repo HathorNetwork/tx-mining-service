@@ -552,3 +552,34 @@ class ManagerTestCase(unittest.TestCase):
         self._run_all_pending_events()
         self.assertTrue(conn.current_job.is_block)
         self.assertEqual(0, conn.current_job.height)
+
+    def test_no_miners_at_start(self):
+        job1 = MinerTxJob(TX1_DATA)
+        self.assertTrue(self.manager.add_job(job1))
+        self.assertEqual(-1, job1.expected_mining_time)
+        self.assertEqual(0, job1.expected_queue_time)
+        self.assertEqual(1, len(self.manager.tx_queue))
+
+        job2 = MinerTxJob(TX2_DATA)
+        self.assertTrue(self.manager.add_job(job2))
+        self.assertEqual(-1, job2.expected_mining_time)
+        self.assertEqual(0, job2.expected_queue_time)
+        self.assertEqual(2, len(self.manager.tx_queue))
+
+        job3 = MinerTxJob(TOKEN_CREATION_TX_DATA)
+        self.assertTrue(self.manager.add_job(job3))
+        self.assertEqual(-1, job3.expected_mining_time)
+        self.assertEqual(0, job3.expected_queue_time)
+        self.assertEqual(3, len(self.manager.tx_queue))
+
+        self.assertEqual([job1, job2, job3], list(self.manager.tx_queue))
+
+        # First miner connects and receives job1.
+        conn1 = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
+        self.assertIsNotNone(conn1.current_job)
+        self.assertEqual(job1, conn1.current_job)
+
+        # Second miner connects and receives job1.
+        conn2 = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
+        self.assertIsNotNone(conn2.current_job)
+        self.assertEqual(job1, conn2.current_job)

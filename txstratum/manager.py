@@ -237,7 +237,9 @@ class TxMiningManager:
         """Enqueue a tx job to be mined."""
         assert job not in self.tx_queue
         job.status = JobStatus.ENQUEUED
-        job.expected_queue_time = sum(x.expected_mining_time for x in self.tx_queue)
+        # When the total hashrate is unknown, `expected_mining_time` is set to -1. Thus, we need to
+        # skip negative values when calculating the `expected_queue_time`.
+        job.expected_queue_time = sum(x.expected_mining_time for x in self.tx_queue if x.expected_mining_time > 0)
         self.tx_queue.append(job)
 
         if job.timeout:
