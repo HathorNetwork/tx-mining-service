@@ -6,7 +6,7 @@ all: check tests
 
 # testing:
 
-tests_lib = $(filter-out tests/__init__.py, $(wildcard tests/*.py))
+tests_lib = ./tests/
 
 pytest_flags = -p no:warnings --cov-report=term --cov-report=html --cov=txstratum
 mypy_tests_flags = --warn-unused-configs --disallow-incomplete-defs --no-implicit-optional --warn-redundant-casts --strict-equality --disallow-subclassing-any --warn-return-any --disallow-untyped-decorators
