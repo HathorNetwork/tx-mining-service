@@ -200,7 +200,19 @@ class MinerBlockJob(MinerJob):
 
     def update_timestamp(self) -> None:
         """Update job timestamp."""
-        self._block.timestamp = int(time.time())
+        now = int(time.time())
+        delta = now - self._block.timestamp
+        if delta < 0:
+            return
+        if delta > 30:
+            # Skip if the new timestamp is too far away from the current timestamp.
+            #
+            # The timestamp is updated every template update. It means that we should only reach
+            # this point if the template update fails or if the template's timestamp is too old.
+            #
+            # TODO Use the new mining api (`/v1a/mining_ws`) that includes min and max timestamp.
+            return
+        self._block.timestamp = now
 
     def get_header_without_nonce(self) -> bytes:
         """Return job's header without nonce."""
