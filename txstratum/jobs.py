@@ -3,12 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import asyncio
 import enum
 import hashlib
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Set
 
+import txstratum.time
 from txstratum.commons import BaseTransaction, Block
 from txstratum.commons.scripts import create_output_script
 from txstratum.utils import tx_or_block_from_bytes
@@ -91,14 +91,12 @@ class MinerTxJob(MinerJob):
         self.expected_queue_time: float = 0
         self.expected_mining_time: float = 0
 
-        loop = asyncio.get_event_loop()
-
         self.uuid: bytes = self.get_uuid(data)
         self.is_block: bool = False
         self.share_weight: float = 0
         self.status: JobStatus = JobStatus.PENDING
         self.message: str = ''
-        self.created_at: float = loop.time()
+        self.created_at: float = txstratum.time.time()
         self.submitted_at: Optional[float] = None
         self.total_time: Optional[float] = None
         self.nonce: Optional[bytes] = None
@@ -120,8 +118,7 @@ class MinerTxJob(MinerJob):
 
     def update_timestamp(self, *, force: bool = False) -> None:
         """Update job timestamp."""
-        loop = asyncio.get_event_loop()
-        self._tx.timestamp = int(loop.time())
+        self._tx.timestamp = int(txstratum.time.time())
 
     def set_parents(self, parents: List[bytes]) -> None:
         """Set tx parents."""
@@ -130,8 +127,7 @@ class MinerTxJob(MinerJob):
 
     def mark_as_solved(self, nonce: bytes) -> None:
         """Mark job as solved."""
-        loop = asyncio.get_event_loop()
-        now = loop.time()
+        now = txstratum.time.time()
         self.status = JobStatus.DONE
         self.nonce = nonce
         self.submitted_at = now
@@ -188,12 +184,10 @@ class MinerBlockJob(MinerJob):
         self._block: Block = Block.create_from_struct(data)
         self.height: int = height
 
-        loop = asyncio.get_event_loop()
-
         self.uuid: bytes = self.get_uuid(data)
         self.is_block: bool = True
         self.share_weight: float = 0
-        self.created_at: float = loop.time()
+        self.created_at: float = txstratum.time.time()
         self.submitted_at: Optional[float] = None
 
     def get_data(self) -> bytes:
@@ -206,8 +200,7 @@ class MinerBlockJob(MinerJob):
 
     def update_timestamp(self, *, force: bool = False) -> None:
         """Update job timestamp."""
-        loop = asyncio.get_event_loop()
-        now = int(loop.time())
+        now = int(txstratum.time.time())
         if not force:
             delta = now - self._block.timestamp
             if delta < 0:

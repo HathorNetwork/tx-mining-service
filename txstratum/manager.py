@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
 from structlog import get_logger
 
+import txstratum.time
 from txstratum.commons.utils import decode_address
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob
 from txstratum.protocol import StratumProtocol
@@ -67,8 +68,7 @@ class TxMiningManager:
 
     async def start(self) -> None:
         """Start the manager."""
-        loop = asyncio.get_event_loop()
-        self.started_at = loop.time()
+        self.started_at = txstratum.time.time()
         await self.update_block_template()
         self.update_block_task = Periodic(self.update_block_template, self.BLOCK_TEMPLATE_UPDATE_INTERVAL)
         await self.update_block_task.start()
@@ -83,8 +83,7 @@ class TxMiningManager:
         """Live uptime after the manager has been started."""
         if not self.started_at:
             return 0.0
-        loop = asyncio.get_event_loop()
-        return loop.time() - self.started_at
+        return txstratum.time.time() - self.started_at
 
     def add_connection(self, protocol: StratumProtocol) -> None:
         """Add a new connection to the list of connections."""
@@ -147,8 +146,7 @@ class TxMiningManager:
             self.block_template_error += 1
             self.log.exception('Error updating block template')
             return
-        loop = asyncio.get_event_loop()
-        self.block_template_updated_at = loop.time()
+        self.block_template_updated_at = txstratum.time.time()
         self.block_template = block_template
         self.log.debug('Block template successfully updated.')
         self.update_miners_block_template()
