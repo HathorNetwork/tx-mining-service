@@ -22,7 +22,8 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--stratum-port', help='Port of Stratum server', type=int, default=8000)
     parser.add_argument('--api-port', help='Port of TxMining API server', type=int, default=8080)
     parser.add_argument('--log-config', help='Config file for logging', default='log.conf')
-    parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=int, default=None)
+    parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=float, default=None)
+    parser.add_argument('--max-timestamp-delta', help='Maximum allowed tx timestamp delta', type=int, default=None)
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
     parser.add_argument('--prometheus', help='Path to export metrics for Prometheus', type=str, default=None)
     parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
@@ -65,7 +66,8 @@ def execute(args: Namespace) -> None:
         metrics = PrometheusExporter(manager, args.prometheus)
         metrics.start()
 
-    api_app = App(manager, max_tx_weight=args.max_tx_weight, tx_timeout=args.tx_timeout)
+    api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
+                  tx_timeout=args.tx_timeout)
     logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout)
     web_runner = web.AppRunner(api_app.app)
     loop.run_until_complete(web_runner.setup())
