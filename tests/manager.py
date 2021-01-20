@@ -11,6 +11,8 @@ from collections import deque
 from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
+import asynctest  # type: ignore
+
 from txstratum.commons.client import BlockTemplate, HathorClient
 from txstratum.jobs import MinerTxJob
 from txstratum.manager import TxMiningManager
@@ -611,3 +613,32 @@ class ManagerTestCase(unittest.TestCase):
         conn2 = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
         self.assertIsNotNone(conn2.current_job)
         self.assertEqual(job1, conn2.current_job)
+
+
+class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
+    def setUp(self):
+        address = 'HC7w4j7mPet49BBN5a2An3XUiPvK6C1TL7'
+
+        self.client = HathorClientTest(server_url='')
+        self.loop.run_until_complete(self.client.start())
+        self.manager = TxMiningManager(backend=self.client, address=address)
+        self.loop.run_until_complete(self.manager.start())
+        self.assertTrue(len(self.manager.block_template) > 0)
+
+    async def test_block_timestamp_update(self):
+        job = self.manager.get_best_job(None)
+        self.assertTrue(True, job.is_block)
+
+        job.update_timestamp(force=True)
+        self.assertEqual(int(self.loop.time()), job._block.timestamp)
+
+        # Update timestamp.
+        await self.advance(10)
+        job.update_timestamp()
+        self.assertEqual(int(self.loop.time()), job._block.timestamp)
+
+        # Do not update timestamp.
+        old_ts = self.loop.time()
+        await self.advance(40)
+        job.update_timestamp()
+        self.assertEqual(int(old_ts), job._block.timestamp)
