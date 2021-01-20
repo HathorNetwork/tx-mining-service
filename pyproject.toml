@@ -22,6 +22,7 @@ base58 = "^2.1.0"
 structlog = "^20.2.0"
 prometheus-client = "^0.9.0"
 idna_ssl = "^1.1.0"
+asynctest = "^0.13.0"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.8.4"

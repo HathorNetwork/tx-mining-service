@@ -3,9 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import asyncio
 import enum
 import hashlib
-import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Set
 
@@ -66,7 +66,7 @@ class MinerJob(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def update_timestamp(self) -> None:
+    def update_timestamp(self, *, force: bool = False) -> None:
         """Update job timestamp."""
         raise NotImplementedError
 
@@ -91,12 +91,14 @@ class MinerTxJob(MinerJob):
         self.expected_queue_time: float = 0
         self.expected_mining_time: float = 0
 
+        loop = asyncio.get_event_loop()
+
         self.uuid: bytes = self.get_uuid(data)
         self.is_block: bool = False
         self.share_weight: float = 0
         self.status: JobStatus = JobStatus.PENDING
         self.message: str = ''
-        self.created_at: float = time.time()
+        self.created_at: float = loop.time()
         self.submitted_at: Optional[float] = None
         self.total_time: Optional[float] = None
         self.nonce: Optional[bytes] = None
@@ -116,9 +118,10 @@ class MinerTxJob(MinerJob):
         """Return data to be submitted to the backend."""
         return bytes(self._tx)
 
-    def update_timestamp(self) -> None:
+    def update_timestamp(self, *, force: bool = False) -> None:
         """Update job timestamp."""
-        self._tx.timestamp = int(time.time())
+        loop = asyncio.get_event_loop()
+        self._tx.timestamp = int(loop.time())
 
     def set_parents(self, parents: List[bytes]) -> None:
         """Set tx parents."""
@@ -127,7 +130,8 @@ class MinerTxJob(MinerJob):
 
     def mark_as_solved(self, nonce: bytes) -> None:
         """Mark job as solved."""
-        now = time.time()
+        loop = asyncio.get_event_loop()
+        now = loop.time()
         self.status = JobStatus.DONE
         self.nonce = nonce
         self.submitted_at = now
@@ -184,10 +188,12 @@ class MinerBlockJob(MinerJob):
         self._block: Block = Block.create_from_struct(data)
         self.height: int = height
 
+        loop = asyncio.get_event_loop()
+
         self.uuid: bytes = self.get_uuid(data)
         self.is_block: bool = True
         self.share_weight: float = 0
-        self.created_at: float = time.time()
+        self.created_at: float = loop.time()
         self.submitted_at: Optional[float] = None
 
     def get_data(self) -> bytes:
@@ -198,20 +204,22 @@ class MinerBlockJob(MinerJob):
         """Return the parsed object of this jobs."""
         return self._block
 
-    def update_timestamp(self) -> None:
+    def update_timestamp(self, *, force: bool = False) -> None:
         """Update job timestamp."""
-        now = int(time.time())
-        delta = now - self._block.timestamp
-        if delta < 0:
-            return
-        if delta > 30:
-            # Skip if the new timestamp is too far away from the current timestamp.
-            #
-            # The timestamp is updated every template update. It means that we should only reach
-            # this point if the template update fails or if the template's timestamp is too old.
-            #
-            # TODO Use the new mining api (`/v1a/mining_ws`) that includes min and max timestamp.
-            return
+        loop = asyncio.get_event_loop()
+        now = int(loop.time())
+        if not force:
+            delta = now - self._block.timestamp
+            if delta < 0:
+                return
+            if delta > 30:
+                # Skip if the new timestamp is too far away from the current timestamp.
+                #
+                # The timestamp is updated every template update. It means that we should only reach
+                # this point if the template update fails or if the template's timestamp is too old.
+                #
+                # TODO Use the new mining api (`/v1a/mining_ws`) that includes min and max timestamp.
+                return
         self._block.timestamp = now
 
     def get_header_without_nonce(self) -> bytes:

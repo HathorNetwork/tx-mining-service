@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import asyncio
-import time
 import uuid
 from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
@@ -208,7 +207,8 @@ class StratumProtocol(JSONRPCProtocol):
             self.log.error('Invalid share weight', uuid=job.uuid.hex(), share_weight=job.share_weight)
             return self.send_error(msgid, self.INVALID_SOLUTION)
 
-        now = time.time()
+        loop = asyncio.get_event_loop()
+        now = loop.time()
         self.completed_jobs += 1
         job.submitted_at = now
         self.last_submit_at = now
@@ -257,7 +257,8 @@ class StratumProtocol(JSONRPCProtocol):
         if not self.current_job:
             # not ready yet, skip this run
             return
-        now = time.time()
+        loop = asyncio.get_event_loop()
+        now = loop.time()
         # remove old entries
         self._submitted_work = [x for x in self._submitted_work if now - x.timestamp < self.ESTIMATOR_WINDOW_INTERVAL]
         # too little jobs, reduce difficulty
@@ -315,7 +316,8 @@ class StratumProtocol(JSONRPCProtocol):
         """Live uptime after the miner is ready."""
         if not self.started_at:
             return 0.0
-        return time.time() - self.started_at
+        loop = asyncio.get_event_loop()
+        return loop.time() - self.started_at
 
     def start_if_ready(self) -> None:
         """Start mining if it is ready."""
@@ -323,7 +325,8 @@ class StratumProtocol(JSONRPCProtocol):
             return
         if self.current_job is not None:
             return
-        self.started_at = time.time()
+        loop = asyncio.get_event_loop()
+        self.started_at = loop.time()
         self.start_periodic_tasks()
         self.manager.mark_connection_as_ready(self)
 
@@ -356,7 +359,8 @@ class StratumProtocol(JSONRPCProtocol):
         if not isinstance(job, MinerBlockJob):
             self.started_current_block_at = None
         elif self.started_current_block_at is None:
-            self.started_current_block_at = time.time()
+            loop = asyncio.get_event_loop()
+            self.started_current_block_at = loop.time()
 
         # Add job to the job list and set it as current job
         self.current_job = job
