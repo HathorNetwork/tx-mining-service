@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Generic, Optio
 
 from structlog import get_logger
 
+from txstratum.constants import DEFAULT_EXPECTED_MINING_TIME
+
 if TYPE_CHECKING:
     from txstratum.commons import BaseTransaction
 
@@ -317,7 +319,10 @@ def calculate_expected_mining_time(miners_hashrate_ghs: float, job_weight: float
       5  | 0.9932
     """
     if miners_hashrate_ghs == 0:
-        return -1
+        # What happens when there is no miners or we don't know the total hashrate?
+        # We return a default expected mining time. For further information, see the
+        # docstring of the constant.
+        return DEFAULT_EXPECTED_MINING_TIME
     return 3 * (2**(job_weight - 30)) / miners_hashrate_ghs
 
 

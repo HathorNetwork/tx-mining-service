@@ -584,22 +584,32 @@ class ManagerTestCase(unittest.TestCase):
         self.assertEqual(0, conn.current_job.height)
 
     def test_no_miners_at_start(self):
+        from txstratum.constants import DEFAULT_EXPECTED_MINING_TIME
+
+        expected_queue_time = 0
+
         job1 = MinerTxJob(TX1_DATA)
         self.assertTrue(self.manager.add_job(job1))
-        self.assertEqual(-1, job1.expected_mining_time)
+        self.assertEqual(DEFAULT_EXPECTED_MINING_TIME, job1.expected_mining_time)
         self.assertEqual(0, job1.expected_queue_time)
         self.assertEqual(1, len(self.manager.tx_queue))
 
+        if DEFAULT_EXPECTED_MINING_TIME > 0:
+            expected_queue_time += DEFAULT_EXPECTED_MINING_TIME
+
         job2 = MinerTxJob(TX2_DATA)
         self.assertTrue(self.manager.add_job(job2))
-        self.assertEqual(-1, job2.expected_mining_time)
-        self.assertEqual(0, job2.expected_queue_time)
+        self.assertEqual(DEFAULT_EXPECTED_MINING_TIME, job2.expected_mining_time)
+        self.assertEqual(expected_queue_time, job2.expected_queue_time)
         self.assertEqual(2, len(self.manager.tx_queue))
+
+        if DEFAULT_EXPECTED_MINING_TIME > 0:
+            expected_queue_time += DEFAULT_EXPECTED_MINING_TIME
 
         job3 = MinerTxJob(TOKEN_CREATION_TX_DATA)
         self.assertTrue(self.manager.add_job(job3))
-        self.assertEqual(-1, job3.expected_mining_time)
-        self.assertEqual(0, job3.expected_queue_time)
+        self.assertEqual(DEFAULT_EXPECTED_MINING_TIME, job3.expected_mining_time)
+        self.assertEqual(expected_queue_time, job3.expected_queue_time)
         self.assertEqual(3, len(self.manager.tx_queue))
 
         self.assertEqual([job1, job2, job3], list(self.manager.tx_queue))
