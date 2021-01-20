@@ -9,6 +9,8 @@ from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 from txstratum.api import App
 from txstratum.manager import TxMiningManager
 
+from .tx_examples import INVALID_TX_DATA
+
 TX1_DATA = bytes.fromhex(
     '0001000102000000000000089c0d40a9b1edfb499bc624833fde87ae459d495000393f4aaa00006'
     'a473045022100c407d5e8f411f9ae582ebd7acbfcb6ea6170332709fb69acaa34c1b426f1d8f502'
@@ -116,6 +118,13 @@ class AppTestCase(AioHTTPTestCase):
     @unittest_run_loop
     async def test_submit_job_invalid_tx(self):
         resp = await self.client.request('POST', '/submit-job', json={'tx': '1234'})
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({'error': 'invalid-tx'}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_invalid_tx_2(self):
+        resp = await self.client.request('POST', '/submit-job', json={'tx': INVALID_TX_DATA.hex()})
         data = await resp.json()
         self.assertEqual(400, resp.status)
         self.assertEqual({'error': 'invalid-tx'}, data)
