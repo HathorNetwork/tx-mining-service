@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 from aiohttp import web
 
 from txstratum.commons import TokenCreationTransaction, Transaction
+from txstratum.commons.exceptions import TxValidationError
 from txstratum.jobs import JobStatus, MinerTxJob
 from txstratum.utils import tx_or_block_from_bytes
 
@@ -70,7 +71,7 @@ class App:
         try:
             tx_bytes = bytes.fromhex(tx_hex)
             tx = tx_or_block_from_bytes(tx_bytes)
-        except ValueError:
+        except (ValueError, TxValidationError):
             return web.json_response({'error': 'invalid-tx'}, status=400)
 
         if not isinstance(tx, (Transaction, TokenCreationTransaction)):
