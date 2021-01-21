@@ -10,7 +10,7 @@ from structlog import get_logger
 
 import txstratum.time
 from txstratum.commons.utils import decode_address
-from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob
+from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.utils import Periodic, calculate_expected_mining_time
 
@@ -48,8 +48,8 @@ class TxMiningManager:
         self.backend: 'HathorClient' = backend
         self.address = address
         self.started_at: float = 0
-        self.tx_jobs: Dict[bytes, MinerTxJob] = {}
-        self.tx_queue: Deque[MinerTxJob] = deque()
+        self.tx_jobs: Dict[bytes, TxJob] = {}
+        self.tx_queue: Deque[TxJob] = deque()
         self.connections: Dict[str, StratumProtocol] = {}
         self.miners: Dict[str, StratumProtocol] = {}
         self.latest_submitted_block_height: int = -1
@@ -99,11 +99,12 @@ class TxMiningManager:
         self.miners[protocol.miner_id] = protocol
         self.update_miner_job(protocol)
 
-    def update_miner_job(self, protocol: StratumProtocol) -> None:
+    def update_miner_job(self, protocol: StratumProtocol, *, clean: bool = False) -> None:
         """Send a new job for a miner."""
         job = self.get_best_job(protocol)
         # TODO Set clean based on old job vs. new job
-        clean = isinstance(job, MinerTxJob)
+        if isinstance(job, MinerTxJob):
+            clean = True
         protocol.update_job(job, clean=clean)
 
     def submit_solution(self, protocol: StratumProtocol, job: MinerJob, nonce: bytes) -> None:
@@ -116,23 +117,25 @@ class TxMiningManager:
             asyncio.ensure_future(self.backend.push_tx_or_block(job.get_data()))
             # XXX Should we stop all other miners from mining?
             asyncio.ensure_future(self.update_block_template())
-            self.log.info('Block found', job=job.uuid)
+            self.log.info('Block found', job=job.uuid.hex())
             self.blocks_found += 1
 
         else:
             assert isinstance(job, MinerTxJob)
             # Remove from queue.
-            job2 = self.tx_queue.popleft()
-            assert job is job2
+            tx_job = job.tx_job
+            tx_job2 = self.tx_queue.popleft()
+            assert tx_job is tx_job2
             # Schedule to clean it up.
             loop = asyncio.get_event_loop()
-            loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job)
+            loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, tx_job)
             # Mark as solved, stop mining it, and propagate if requested.
-            job.mark_as_solved(nonce)
-            self.stop_mining_tx(job)
-            if job.propagate:
-                asyncio.ensure_future(self.backend.push_tx_or_block(job.get_data()))
-            self.log.info('TxJob solved', propagate=job.propagate, job=job.to_dict())
+            tx_job.mark_as_solved(nonce=nonce, timestamp=job.get_object().timestamp)
+            self.stop_mining_tx(tx_job)
+            if tx_job.propagate:
+                tx_bytes = bytes(tx_job.get_tx())
+                asyncio.ensure_future(self.backend.push_tx_or_block(tx_bytes))
+            self.log.info('TxJob solved', propagate=tx_job.propagate, tx_job=tx_job.to_dict())
             self.txs_solved += 1
 
     async def update_block_template(self) -> None:
@@ -180,11 +183,11 @@ class TxMiningManager:
             'block_template': self.block_template.to_dict() if self.block_template else None,
         }
 
-    def get_job(self, uuid: bytes) -> Optional[MinerTxJob]:
-        """Return the MinerTxJob related to the uuid."""
+    def get_job(self, uuid: bytes) -> Optional[TxJob]:
+        """Return the TxJob related to the uuid."""
         return self.tx_jobs.get(uuid)
 
-    def add_job(self, job: MinerTxJob) -> bool:
+    def add_job(self, job: TxJob) -> bool:
         """Add new tx to be mined."""
         if job.uuid in self.tx_jobs:
             return False
@@ -201,7 +204,7 @@ class TxMiningManager:
             self.enqueue_tx_job(job)
         return True
 
-    async def add_parents(self, job: MinerTxJob) -> None:
+    async def add_parents(self, job: TxJob) -> None:
         """Add tx parents to job, then enqueue it."""
         job.status = JobStatus.GETTING_PARENTS
         try:
@@ -216,7 +219,7 @@ class TxMiningManager:
             job.set_parents(parents)
             self.enqueue_tx_job(job)
 
-    def cancel_job(self, job: MinerTxJob) -> None:
+    def cancel_job(self, job: TxJob) -> None:
         """Cancel tx mining job."""
         if job.status in JobStatus.get_after_mining_states():
             raise ValueError('Job has already finished')
@@ -226,7 +229,7 @@ class TxMiningManager:
         self.stop_mining_tx(job)
         self.log.info('TxJob cancelled', job=job.to_dict())
 
-    def _job_timeout_if_possible(self, job: MinerTxJob) -> None:
+    def _job_timeout_if_possible(self, job: TxJob) -> None:
         """Stop mining a tx job because it timeout."""
         if job.status in JobStatus.get_after_mining_states():
             return
@@ -239,7 +242,7 @@ class TxMiningManager:
         loop = asyncio.get_event_loop()
         loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job)
 
-    def enqueue_tx_job(self, job: MinerTxJob) -> None:
+    def enqueue_tx_job(self, job: TxJob) -> None:
         """Enqueue a tx job to be mined."""
         assert job not in self.tx_queue
         job.status = JobStatus.ENQUEUED
@@ -259,13 +262,15 @@ class TxMiningManager:
         for _, protocol in self.miners.items():
             self.update_miner_job(protocol)
 
-    def stop_mining_tx(self, job: MinerTxJob) -> None:
+    def stop_mining_tx(self, job: TxJob) -> None:
         """Stop mining a tx job."""
         for protocol in self.miners.values():
-            if protocol.current_job == job:
-                self.update_miner_job(protocol)
+            if protocol.current_job is not None and not protocol.current_job.is_block:
+                assert isinstance(protocol.current_job, MinerTxJob)
+                if protocol.current_job.tx_job == job:
+                    self.update_miner_job(protocol)
 
-    def _job_clean_up(self, job: MinerTxJob) -> None:
+    def _job_clean_up(self, job: TxJob) -> None:
         """Clean up tx job. It is scheduled after a tx is solved."""
         self.tx_jobs.pop(job.uuid)
 
@@ -276,6 +281,6 @@ class TxMiningManager:
             assert job.status not in JobStatus.get_after_mining_states()
             if job.status != JobStatus.MINING:
                 job.status = JobStatus.MINING
-            return job
+            return MinerTxJob(job)
         assert self.block_template is not None
         return MinerBlockJob(data=self.block_template.data, height=self.block_template.height)

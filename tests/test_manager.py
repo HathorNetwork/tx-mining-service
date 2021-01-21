@@ -15,7 +15,7 @@ import asynctest  # type: ignore
 
 import txstratum.time
 from txstratum.commons.client import BlockTemplate, HathorClient
-from txstratum.jobs import MinerTxJob
+from txstratum.jobs import TxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
 
@@ -416,15 +416,19 @@ class ManagerTestCase(unittest.TestCase):
         conn2 = self._get_ready_miner()
         self.assertEqual(0, conn1.current_job.height)
         self.assertEqual(0, conn2.current_job.height)
-
-        # First submission: success
-        params = {
+        params1 = {
             'job_id': conn1.current_job.uuid.hex(),
             'nonce': '00000000000000000000000000278a7e',
         }
+        params2 = {
+            'job_id': conn2.current_job.uuid.hex(),
+            'nonce': '00000000000000000000000000278a7e',
+        }
+
+        # First submission: success
         conn1.send_error = MagicMock(return_value=None)
         conn1.send_result = MagicMock(return_value=None)
-        conn1.method_submit(params=params, msgid=None)
+        conn1.method_submit(params=params1, msgid=None)
         conn1.send_error.assert_not_called()
         conn1.send_result.assert_called_once_with(None, 'ok')
 
@@ -434,19 +438,21 @@ class ManagerTestCase(unittest.TestCase):
         self.assertEqual(1, conn1.current_job.height)
         self.assertEqual(1, conn2.current_job.height)
 
-        # As jobs have been updated, the submission from the second miner will be considered stale.
-        # Second submission: stale.
+        # As jobs have been updated, the submission from the second miner will be accepted but not propagated.
+        # Second submission: success and not propagated.
         conn2.send_error = MagicMock(return_value=None)
         conn2.send_result = MagicMock(return_value=None)
-        conn2.method_submit(params=params, msgid=None)
-        conn2.send_error.assert_called_once_with(None, conn2.STALE_JOB, ANY)
-        conn2.send_result.assert_not_called()
+        self.manager.backend.push_tx_or_block = MagicMock(return_value=asyncio.Future())
+        conn2.method_submit(params=params2, msgid=None)
+        conn1.send_error.assert_not_called()
+        conn1.send_result.assert_called_once_with(None, 'ok')
+        self.manager.backend.push_tx_or_block.assert_not_called()
 
     def _run_basic_tx_tests(self, conn, tx_data, tx_nonce):
-        job = MinerTxJob(tx_data)
+        job = TxJob(tx_data)
         ret = self.manager.add_job(job)
         self.assertFalse(conn.current_job.is_block)
-        self.assertEqual(conn.current_job, job)
+        self.assertEqual(conn.current_job.tx_job, job)
         self.assertTrue(ret)
 
         # First submission: wrong nonce
@@ -472,7 +478,7 @@ class ManagerTestCase(unittest.TestCase):
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, 'ok')
 
-        # Second submission: stale
+        # Third submission: stale
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
@@ -498,12 +504,12 @@ class ManagerTestCase(unittest.TestCase):
         self.assertTrue(conn.current_job.is_block)
         self.assertEqual(0, conn.current_job.height)
 
-        job1 = MinerTxJob(TX1_DATA)
-        job2 = MinerTxJob(TX2_DATA)
+        job1 = TxJob(TX1_DATA)
+        job2 = TxJob(TX2_DATA)
         ret1 = self.manager.add_job(job1)
         ret2 = self.manager.add_job(job2)
         self.assertFalse(conn.current_job.is_block)
-        self.assertEqual(conn.current_job, job1)
+        self.assertEqual(conn.current_job.tx_job, job1)
         self.assertTrue(ret1)
         self.assertTrue(ret2)
 
@@ -521,7 +527,7 @@ class ManagerTestCase(unittest.TestCase):
         # Run loop and check that the miner gets the next tx
         self._run_all_pending_events()
         self.assertFalse(conn.current_job.is_block)
-        self.assertEqual(conn.current_job, job2)
+        self.assertEqual(conn.current_job.tx_job, job2)
 
         # First submission: success
         params = {
@@ -550,17 +556,17 @@ class ManagerTestCase(unittest.TestCase):
         self.assertTrue(conn2.current_job.is_block)
         self.assertEqual(0, conn2.current_job.height)
 
-        job = MinerTxJob(TX1_DATA)
+        job = TxJob(TX1_DATA)
         ret = self.manager.add_job(job)
         self.assertTrue(ret)
         self.assertFalse(conn1.current_job.is_block)
-        self.assertEqual(conn1.current_job, job)
-        self.assertEqual(conn2.current_job, job)
+        self.assertEqual(conn1.current_job.tx_job, job)
+        self.assertEqual(conn2.current_job.tx_job, job)
 
         # Miner 1 disconnects.
         conn1.connection_lost(exc=None)
         self.assertFalse(conn2.current_job.is_block)
-        self.assertEqual(conn2.current_job, job)
+        self.assertEqual(conn2.current_job.tx_job, job)
 
         # Miner 2 disconnects. Tx stays on the queue.
         conn2.connection_lost(exc=None)
@@ -569,7 +575,7 @@ class ManagerTestCase(unittest.TestCase):
         # Miner 3 connects. Tx is sent to the new miner.
         conn3 = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
         self.assertFalse(conn3.current_job.is_block)
-        self.assertEqual(conn3.current_job, job)
+        self.assertEqual(conn3.current_job.tx_job, job)
 
     def test_token_creation_tx(self):
         conn = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
@@ -589,7 +595,7 @@ class ManagerTestCase(unittest.TestCase):
 
         expected_queue_time = 0
 
-        job1 = MinerTxJob(TX1_DATA)
+        job1 = TxJob(TX1_DATA)
         self.assertTrue(self.manager.add_job(job1))
         self.assertEqual(DEFAULT_EXPECTED_MINING_TIME, job1.expected_mining_time)
         self.assertEqual(0, job1.expected_queue_time)
@@ -598,7 +604,7 @@ class ManagerTestCase(unittest.TestCase):
         if DEFAULT_EXPECTED_MINING_TIME > 0:
             expected_queue_time += DEFAULT_EXPECTED_MINING_TIME
 
-        job2 = MinerTxJob(TX2_DATA)
+        job2 = TxJob(TX2_DATA)
         self.assertTrue(self.manager.add_job(job2))
         self.assertEqual(DEFAULT_EXPECTED_MINING_TIME, job2.expected_mining_time)
         self.assertEqual(expected_queue_time, job2.expected_queue_time)
@@ -607,7 +613,7 @@ class ManagerTestCase(unittest.TestCase):
         if DEFAULT_EXPECTED_MINING_TIME > 0:
             expected_queue_time += DEFAULT_EXPECTED_MINING_TIME
 
-        job3 = MinerTxJob(TOKEN_CREATION_TX_DATA)
+        job3 = TxJob(TOKEN_CREATION_TX_DATA)
         self.assertTrue(self.manager.add_job(job3))
         self.assertEqual(DEFAULT_EXPECTED_MINING_TIME, job3.expected_mining_time)
         self.assertEqual(expected_queue_time, job3.expected_queue_time)
@@ -618,12 +624,12 @@ class ManagerTestCase(unittest.TestCase):
         # First miner connects and receives job1.
         conn1 = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
         self.assertIsNotNone(conn1.current_job)
-        self.assertEqual(job1, conn1.current_job)
+        self.assertEqual(job1, conn1.current_job.tx_job)
 
         # Second miner connects and receives job1.
         conn2 = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
         self.assertIsNotNone(conn2.current_job)
-        self.assertEqual(job1, conn2.current_job)
+        self.assertEqual(job1, conn2.current_job.tx_job)
 
 
 class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
