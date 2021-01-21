@@ -37,14 +37,14 @@ class StratumProtocol(JSONRPCProtocol):
     Specification: https://en.bitcoin.it/wiki/Stratum_mining_protocol
     """
 
-    ESTIMATOR_LOOP_INTERVAL = 30  # in seconds, "frequency" that the function that updates the estimator will be called
+    ESTIMATOR_LOOP_INTERVAL = 15  # in seconds, "frequency" that the function that updates the estimator will be called
     ESTIMATOR_WINDOW_INTERVAL = 60 * 15  # in seconds, size of the window to use for estimating miner's hashrate
     TARGET_JOB_TIME = 15  # in seconds, adjust difficulty so jobs take this long
     JOB_UPDATE_INTERVAL = 2  # in seconds, to update the timestamp of the job
 
-    MIN_WEIGHT = 20  # minimum "difficulty" to assign to jobs
-    MAX_WEIGHT = 60  # maximum "difficulty" to assign to jobs
-    INITIAL_WEIGHT = 30  # initial "difficulty" to assign to jobs, can raise or drop based on solvetimes
+    MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
+    MAX_WEIGHT = 60.0  # maximum "difficulty" to assign to jobs
+    INITIAL_WEIGHT = 30.0  # initial "difficulty" to assign to jobs, can raise or drop based on solvetimes
     MAX_JOBS = 1000  # maximum number of jobs to keep in memory
 
     INVALID_ADDRESS = JSONRPCError(22, 'Address to send mined funds is invalid')
@@ -195,7 +195,7 @@ class StratumProtocol(JSONRPCProtocol):
             # XXX Should we look into the job history? It may be necessary if the job was not marked as clean.
             return self.send_error(msgid, self.JOB_NOT_FOUND)
 
-        if job is not self.current_job or job.submitted_at is not None:
+        if job.submitted_at is not None:
             return self.send_error(msgid, self.STALE_JOB, {
                 'current_job': self.current_job and self.current_job.uuid.hex(),
                 'job_id': job_id.hex()
@@ -205,7 +205,8 @@ class StratumProtocol(JSONRPCProtocol):
         obj.nonce = nonce
         obj.update_hash()
         if not obj.verify_pow(override_weight=job.share_weight):
-            self.log.error('Invalid share weight', uuid=job.uuid.hex(), share_weight=job.share_weight)
+            self.log.error('Invalid share weight', uuid=job_id.hex(), share_weight=job.share_weight,
+                           data=job.get_data().hex())
             return self.send_error(msgid, self.INVALID_SOLUTION)
 
         now = txstratum.time.time()
@@ -233,8 +234,8 @@ class StratumProtocol(JSONRPCProtocol):
                 self.txs_solved += 1
 
         else:
-            # XXX TODO Should we send a new job?
-            pass
+            # Get a new job.
+            self.manager.update_miner_job(self, clean=True)
 
     def method_configure(self, params: Any, msgid: JSONRPCId) -> None:
         """Handle stratum-extensions configuration from JSONRPC.
@@ -282,7 +283,7 @@ class StratumProtocol(JSONRPCProtocol):
         """Set current weight and update miner's job."""
         self.current_weight = max(self.MIN_WEIGHT, weight)
         assert self.current_job is not None
-        self.update_job(self.current_job, clean=False)
+        self.manager.update_miner_job(self, clean=False)
 
     def is_ready(self) -> bool:
         """Return True if miner is ready to mine."""
@@ -336,7 +337,7 @@ class StratumProtocol(JSONRPCProtocol):
     async def refresh_job(self) -> None:
         """Refresh miner's job, updating timestamp."""
         assert self.current_job is not None
-        self.update_job(self.current_job, clean=False)
+        self.manager.update_miner_job(self, clean=False)
 
     def update_job(self, job: 'MinerJob', *, clean: bool) -> None:
         """Update miner's job. It is called by the manager."""
@@ -367,7 +368,7 @@ class StratumProtocol(JSONRPCProtocol):
             'data': job.get_header_without_nonce().hex(),
             'job_id': job.uuid.hex(),
             'nonce_size': job.get_nonce_size(),
-            'weight': job.share_weight,
+            'weight': float(job.share_weight),
             'clean': clean,
         }
         self.log.debug('Update job', job=job_data, block=job.get_data().hex())

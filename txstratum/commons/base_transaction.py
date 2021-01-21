@@ -146,6 +146,14 @@ class BaseTransaction(ABC):
         class_name = type(self).__name__
         return '%s(%s)' % (class_name, ', '.join('%s=%s' % i for i in self._get_formatted_fields_dict().items()))
 
+    def clone(self) -> 'BaseTransaction':
+        """Return exact copy without sharing memory, including metadata if loaded.
+
+        :return: Transaction or Block copy
+        """
+        new_tx = self.create_from_struct(bytes(self))
+        return new_tx
+
     def get_fields_from_struct(self, struct_bytes: bytes) -> bytes:
         """ Gets all common fields for a Transaction and a Block from a buffer.
 

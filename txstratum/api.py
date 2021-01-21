@@ -11,7 +11,7 @@ from aiohttp import web
 import txstratum.time
 from txstratum.commons import TokenCreationTransaction, Transaction
 from txstratum.commons.exceptions import TxValidationError
-from txstratum.jobs import JobStatus, MinerTxJob
+from txstratum.jobs import JobStatus, TxJob
 from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
@@ -104,13 +104,13 @@ class App:
         add_parents = data.get('add_parents', False)
         propagate = data.get('propagate', False)
 
-        job = MinerTxJob(tx_bytes, add_parents=add_parents, propagate=propagate, timeout=timeout)
+        job = TxJob(tx_bytes, add_parents=add_parents, propagate=propagate, timeout=timeout)
         success = self.manager.add_job(job)
         if not success:
             return web.json_response({'error': 'job-already-exists'}, status=400)
         return web.json_response(job.to_dict())
 
-    def _get_job(self, uuid_hex: Optional[str]) -> MinerTxJob:
+    def _get_job(self, uuid_hex: Optional[str]) -> TxJob:
         """Return job from uuid_hex. It raises web exceptions for common issues."""
         if not uuid_hex:
             raise web.HTTPBadRequest(
