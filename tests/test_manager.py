@@ -109,6 +109,7 @@ class ManagerTestCase(unittest.TestCase):
         self.loop.run_until_complete(self.client.start())
         self.manager = TxMiningManager(backend=self.client, address=address)
         self.loop.run_until_complete(self.manager.start())
+        self.loop.run_until_complete(self.manager.wait_for_block_template())
         self.assertTrue(len(self.manager.block_template) > 0)
 
     def _run_all_pending_events(self):
@@ -378,6 +379,7 @@ class ManagerTestCase(unittest.TestCase):
 
         # Hathor full node returned a new block template.
         self.client.next_block_template()
+        self.loop.run_until_complete(self.manager.update_block_template())
         self._run_all_pending_events()
 
         self.assertEqual(1, conn.current_job.height)
@@ -644,6 +646,7 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         self.loop.run_until_complete(self.client.start())
         self.manager = TxMiningManager(backend=self.client, address=address)
         self.loop.run_until_complete(self.manager.start())
+        self.loop.run_until_complete(self.manager.wait_for_block_template())
         self.assertTrue(len(self.manager.block_template) > 0)
 
     def tearDown(self):

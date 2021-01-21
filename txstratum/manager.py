@@ -69,9 +69,14 @@ class TxMiningManager:
     async def start(self) -> None:
         """Start the manager."""
         self.started_at = txstratum.time.time()
-        await self.update_block_template()
         self.update_block_task = Periodic(self.update_block_template, self.BLOCK_TEMPLATE_UPDATE_INTERVAL)
         await self.update_block_task.start()
+
+    async def wait_for_block_template(self, interval: float = 0.1) -> None:
+        """Wait until receiving a block_template."""
+        while self.block_template is None:
+            self.log.info('Waiting for first block template...')
+            await asyncio.sleep(interval)
 
     async def stop(self) -> None:
         """Stop the manager."""
@@ -102,6 +107,10 @@ class TxMiningManager:
     def update_miner_job(self, protocol: StratumProtocol, *, clean: bool = False) -> None:
         """Send a new job for a miner."""
         job = self.get_best_job(protocol)
+        if job is None:
+            # We do not have a job for the miner. We could close the connection,
+            # but we do not do it because a TxJob might arrive anytime.
+            return
         # TODO Set clean based on old job vs. new job
         if isinstance(job, MinerTxJob):
             clean = True
@@ -145,7 +154,9 @@ class TxMiningManager:
             block_template = await self.backend.get_block_template(address=self.address)
         except Exception:
             # XXX What should we do?!
-            self.block_template = None
+            dt = txstratum.time.time() - self.block_template_updated_at
+            if dt > 60:
+                self.block_template = None
             self.block_template_error += 1
             self.log.exception('Error updating block template')
             return
@@ -274,7 +285,7 @@ class TxMiningManager:
         """Clean up tx job. It is scheduled after a tx is solved."""
         self.tx_jobs.pop(job.uuid)
 
-    def get_best_job(self, protocol: StratumProtocol) -> MinerJob:
+    def get_best_job(self, protocol: StratumProtocol) -> Optional[MinerJob]:
         """Return best job for a miner."""
         if len(self.tx_queue) > 0:
             job = self.tx_queue[0]
@@ -282,5 +293,7 @@ class TxMiningManager:
             if job.status != JobStatus.MINING:
                 job.status = JobStatus.MINING
             return MinerTxJob(job)
-        assert self.block_template is not None
+        if self.block_template is None:
+            self.log.error('Cannot generate MinerBlockJob because block_template is empty')
+            return None
         return MinerBlockJob(data=self.block_template.data, height=self.block_template.height)

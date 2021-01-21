@@ -80,6 +80,10 @@ class HathorClient:
         if address is not None:
             params['address'] = address
         async with self._session.get(self._get_url('get_block_template'), params=params) as resp:
+            if resp.status != 200:
+                self.log.error('Error getting block template', status=resp.status)
+                raise RuntimeError('Cannot get block template (status {})'.format(resp.status))
+
             data = await resp.json()
 
             if data.get('error'):
