@@ -34,8 +34,9 @@ def create_parser() -> ArgumentParser:
 
 def execute(args: Namespace) -> None:
     """Run the service according to the args."""
+    from hathorlib.client import HathorClient
+
     from txstratum.api import App
-    from txstratum.commons.client import HathorClient
     from txstratum.manager import TxMiningManager
 
     # Configure log.
@@ -96,6 +97,6 @@ def main() -> None:
 
     if args.testnet:
         if not os.environ.get('TXMINING_CONFIG_FILE'):
-            os.environ['TXMINING_CONFIG_FILE'] = 'txstratum.commons.conf.testnet'
+            os.environ['TXMINING_CONFIG_FILE'] = 'hathorlib.conf.testnet'
 
     execute(args)

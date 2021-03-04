@@ -6,16 +6,16 @@ import asyncio
 from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
+from hathorlib.utils import decode_address
 from structlog import get_logger
 
 import txstratum.time
-from txstratum.commons.utils import decode_address
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.utils import Periodic, calculate_expected_mining_time
 
 if TYPE_CHECKING:
-    from txstratum.commons.client import BlockTemplate, HathorClient  # noqa: F401
+    from hathorlib.client import BlockTemplate, HathorClient  # noqa: F401
 
 logger = get_logger()
 

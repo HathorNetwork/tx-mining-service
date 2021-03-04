@@ -7,10 +7,10 @@ import json
 from typing import TYPE_CHECKING, Optional
 
 from aiohttp import web
+from hathorlib import TokenCreationTransaction, Transaction
+from hathorlib.exceptions import TxValidationError
 
 import txstratum.time
-from txstratum.commons import TokenCreationTransaction, Transaction
-from txstratum.commons.exceptions import TxValidationError
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.utils import tx_or_block_from_bytes
 
