@@ -7,12 +7,12 @@ import uuid
 from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
 
+from hathorlib import sum_weights
+from hathorlib.exceptions import InvalidAddress
+from hathorlib.utils import decode_address
 from structlog import get_logger
 
 import txstratum.time
-from txstratum.commons import sum_weights
-from txstratum.commons.exceptions import InvalidAddress
-from txstratum.commons.utils import decode_address
 from txstratum.jobs import MinerBlockJob
 from txstratum.utils import JSONRPCError, JSONRPCId, JSONRPCProtocol, MaxSizeOrderedDict, Periodic
 

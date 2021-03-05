@@ -8,9 +8,10 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Set
 
+from hathorlib import BaseTransaction, Block
+from hathorlib.scripts import create_output_script
+
 import txstratum.time
-from txstratum.commons import BaseTransaction, Block
-from txstratum.commons.scripts import create_output_script
 from txstratum.utils import tx_or_block_from_bytes
 
 

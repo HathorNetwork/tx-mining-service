@@ -12,9 +12,9 @@ from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
 import asynctest  # type: ignore
+from hathorlib.client import BlockTemplate, HathorClient
 
 import txstratum.time
-from txstratum.commons.client import BlockTemplate, HathorClient
 from txstratum.jobs import TxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
@@ -122,7 +122,7 @@ class ManagerTestCase(unittest.TestCase):
         self.loop.run_until_complete(future)
 
     def test_invalid_mining_address(self):
-        from txstratum.commons.exceptions import InvalidAddress
+        from hathorlib.exceptions import InvalidAddress
         address = 'HC7w4j7mPet49BBN5a2An3XUiPvK6C1TL7'
 
         invalid_addresses = [

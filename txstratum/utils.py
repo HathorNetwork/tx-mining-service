@@ -14,7 +14,7 @@ from structlog import get_logger
 from txstratum.constants import DEFAULT_EXPECTED_MINING_TIME
 
 if TYPE_CHECKING:
-    from txstratum.commons import BaseTransaction
+    from hathorlib import BaseTransaction
 
 logger = get_logger()
 
@@ -328,7 +328,7 @@ def calculate_expected_mining_time(miners_hashrate_ghs: float, job_weight: float
 
 def tx_or_block_from_bytes(data: bytes) -> 'BaseTransaction':
     """Create the correct tx subclass from a sequence of bytes."""
-    from txstratum.commons import TxVersion
+    from hathorlib import TxVersion
 
     # version field takes up the first 2 bytes
     version = int.from_bytes(data[0:2], 'big')
