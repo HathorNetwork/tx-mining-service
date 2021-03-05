@@ -48,11 +48,17 @@ def update_timestamp(tx_bytes: bytes, *, delta: int = 0) -> bytes:
     return bytes(tx)
 
 
+def get_timestamp(tx_bytes: bytes) -> int:
+    """Get timestamp of a serialized tx."""
+    tx = tx_or_block_from_bytes(tx_bytes)
+    return tx.timestamp
+
+
 class AppTestCase(AioHTTPTestCase):
     async def get_application(self):
         self.manager = TxMiningManager(backend=None, address=None)
-        app = App(self.manager)
-        return app.app
+        self.myapp = App(self.manager)
+        return self.myapp.app
 
     @unittest_run_loop
     async def test_health_check(self):
@@ -153,6 +159,32 @@ class AppTestCase(AioHTTPTestCase):
         data = await resp.json()
         self.assertEqual(400, resp.status)
         self.assertEqual({'error': 'tx-timestamp-invalid'}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_fix_invalid_tx_timestamp1(self):
+        self.myapp.fix_invalid_timestamp = True
+        tx_bytes = update_timestamp(TX1_DATA, delta=MAX_TIMESTAMP_DELTA + 1)
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_bytes.hex()})
+        self.assertEqual(200, resp.status)
+        data = await resp.json()
+        job_id = bytes.fromhex(data['job_id'])
+        job = self.manager.tx_jobs[job_id]
+        tx = job.get_tx()
+        self.assertNotEqual(tx.timestamp, get_timestamp(tx_bytes))
+        self.assertEqual(tx.timestamp, int(txstratum.time.time()))
+
+    @unittest_run_loop
+    async def test_submit_job_fix_invalid_tx_timestamp2(self):
+        self.myapp.fix_invalid_timestamp = True
+        tx_bytes = update_timestamp(TX1_DATA, delta=-(MAX_TIMESTAMP_DELTA + 1))
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_bytes.hex()})
+        self.assertEqual(200, resp.status)
+        data = await resp.json()
+        job_id = bytes.fromhex(data['job_id'])
+        job = self.manager.tx_jobs[job_id]
+        tx = job.get_tx()
+        self.assertNotEqual(tx.timestamp, get_timestamp(tx_bytes))
+        self.assertEqual(tx.timestamp, int(txstratum.time.time()))
 
     @unittest_run_loop
     async def test_submit_job_invalid_tx_weight(self):
