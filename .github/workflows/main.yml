@@ -14,7 +14,6 @@ jobs:
   test:
     name: python-${{ matrix.python }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40  # default is 360
     strategy:
       matrix:
         python:

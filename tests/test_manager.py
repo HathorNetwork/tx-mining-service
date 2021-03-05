@@ -15,7 +15,7 @@ import asynctest  # type: ignore
 from hathorlib.client import BlockTemplate, HathorClient
 
 import txstratum.time
-from txstratum.jobs import TxJob
+from txstratum.jobs import JobStatus, TxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
 
@@ -669,3 +669,74 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         await self.advance(40)
         job.update_timestamp()
         self.assertEqual(int(old_ts), job._block.timestamp)
+
+    async def test_tx_resubmit(self):
+        job1 = TxJob(TX1_DATA, timeout=10)
+        ret1 = self.manager.add_job(job1)
+        self.assertTrue(ret1)
+
+        # When a similar job is submitted, manager declines it.
+        job2 = TxJob(TX1_DATA)
+        ret2 = self.manager.add_job(job2)
+        self.assertFalse(ret2)
+
+        # Wait until job1 is marked as timeout.
+        await self.advance(15)
+        self.assertEqual(job1.status, JobStatus.TIMEOUT)
+
+        # Try to resubmit a similar job.
+        job3 = TxJob(TX1_DATA)
+        ret3 = self.manager.add_job(job3)
+        self.assertTrue(ret3)
+
+    async def test_tx_timeout_and_cleanup(self):
+        job1 = TxJob(TX1_DATA, timeout=10)
+        ret1 = self.manager.add_job(job1)
+        self.assertTrue(ret1)
+        self.assertIn(job1, self.manager.tx_queue)
+        self.assertIn(job1.uuid, self.manager.tx_jobs)
+
+        # Wait until job1 is marked as timeout.
+        await self.advance(15)
+        self.assertEqual(job1.status, JobStatus.TIMEOUT)
+        self.assertNotIn(job1, self.manager.tx_queue)
+        self.assertIn(job1.uuid, self.manager.tx_jobs)
+
+        # Wait until job1 is cleared.
+        await self.advance(self.manager.TX_CLEAN_UP_INTERVAL)
+        self.assertNotIn(job1, self.manager.tx_queue)
+        self.assertNotIn(job1.uuid, self.manager.tx_jobs)
+
+    async def test_tx_race_condition(self):
+        """Test race condition caused when job2 replaces job1 and job1's clean up is close to be executed.
+        In this case job1's clean up was cleaning job2 instead.
+        """
+        job1 = TxJob(TX1_DATA, timeout=10)
+        ret1 = self.manager.add_job(job1)
+        self.assertTrue(ret1)
+
+        # Wait until job1 is marked as timeout.
+        await self.advance(10)
+        self.assertEqual(job1.status, JobStatus.TIMEOUT)
+        self.assertNotIn(job1, self.manager.tx_queue)
+        self.assertIn(job1.uuid, self.manager.tx_jobs)
+
+        # We are 1 second away to cleanup the tx.
+        await self.advance(self.manager.TX_CLEAN_UP_INTERVAL - 1)
+
+        # Resubmit a similar job.
+        job2 = TxJob(TX1_DATA, timeout=10)
+        ret2 = self.manager.add_job(job2)
+        self.assertTrue(ret2)
+        self.assertIn(job2, self.manager.tx_queue)
+        self.assertIn(job2.uuid, self.manager.tx_jobs)
+
+        # Reach the cleanup time of job1.
+        await self.advance(2)
+        self.assertEqual(job2.status, JobStatus.ENQUEUED)
+        self.assertIn(job2, self.manager.tx_queue)
+        self.assertIn(job2.uuid, self.manager.tx_jobs)
+
+        # Job2 timeouts.
+        await self.advance(15)
+        self.assertEqual(job2.status, JobStatus.TIMEOUT)
