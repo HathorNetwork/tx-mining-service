@@ -136,8 +136,7 @@ class TxMiningManager:
             tx_job2 = self.tx_queue.popleft()
             assert tx_job is tx_job2
             # Schedule to clean it up.
-            loop = asyncio.get_event_loop()
-            loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, tx_job)
+            self.schedule_job_clean_up(tx_job)
             # Mark as solved, stop mining it, and propagate if requested.
             tx_job.mark_as_solved(nonce=nonce, timestamp=job.get_object().timestamp)
             self.stop_mining_tx(tx_job)
@@ -146,6 +145,21 @@ class TxMiningManager:
                 asyncio.ensure_future(self.backend.push_tx_or_block(tx_bytes))
             self.log.info('TxJob solved', propagate=tx_job.propagate, tx_job=tx_job.to_dict())
             self.txs_solved += 1
+
+    def schedule_job_timeout(self, job: TxJob) -> None:
+        """Schedule to have a TxJob marked as timeout."""
+        if job._timeout_timer:
+            job._timeout_timer.cancel()
+        if job.timeout is not None:
+            loop = asyncio.get_event_loop()
+            job._timeout_timer = loop.call_later(job.timeout, self._job_timeout_if_possible, job)
+
+    def schedule_job_clean_up(self, job: TxJob) -> None:
+        """Schedule to have a TxJob cleaned up."""
+        if job._cleanup_timer:
+            job._cleanup_timer.cancel()
+        loop = asyncio.get_event_loop()
+        job._cleanup_timer = loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job)
 
     async def update_block_template(self) -> None:
         """Update block template. It is periodically called."""
@@ -201,7 +215,11 @@ class TxMiningManager:
     def add_job(self, job: TxJob) -> bool:
         """Add new tx to be mined."""
         if job.uuid in self.tx_jobs:
-            return False
+            prev_job = self.tx_jobs[job.uuid]
+            if prev_job.status == JobStatus.TIMEOUT:
+                self._job_clean_up(prev_job)
+            else:
+                return False
         self.tx_jobs[job.uuid] = job
 
         miners_hashrate_ghs = sum(x.hashrate_ghs for x in self.miners.values())
@@ -224,8 +242,7 @@ class TxMiningManager:
             job.status = JobStatus.FAILED
             job.message = 'Unhandled exception: {}'.format(e)
             # Schedule to clean it up.
-            loop = asyncio.get_event_loop()
-            loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job)
+            self.schedule_job_clean_up(job)
         else:
             job.set_parents(parents)
             self.enqueue_tx_job(job)
@@ -244,14 +261,13 @@ class TxMiningManager:
         """Stop mining a tx job because it timeout."""
         if job.status in JobStatus.get_after_mining_states():
             return
+        self.log.info('TxJob timeout', job=job.to_dict())
+        self.txs_timeout += 1
         job.status = JobStatus.TIMEOUT
         self.tx_queue.remove(job)
         self.stop_mining_tx(job)
-        self.log.info('TxJob timeout', job=job.to_dict())
-        self.txs_timeout += 1
         # Schedule to clean it up.
-        loop = asyncio.get_event_loop()
-        loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job)
+        self.schedule_job_clean_up(job)
 
     def enqueue_tx_job(self, job: TxJob) -> None:
         """Enqueue a tx job to be mined."""
@@ -263,8 +279,7 @@ class TxMiningManager:
         self.tx_queue.append(job)
 
         if job.timeout:
-            loop = asyncio.get_event_loop()
-            loop.call_later(job.timeout, self._job_timeout_if_possible, job)
+            self.schedule_job_timeout(job)
 
         if len(self.tx_queue) > 1:
             # If the queue is not empty, do nothing.
@@ -284,6 +299,10 @@ class TxMiningManager:
     def _job_clean_up(self, job: TxJob) -> None:
         """Clean up tx job. It is scheduled after a tx is solved."""
         self.tx_jobs.pop(job.uuid)
+        if job._timeout_timer:
+            job._timeout_timer.cancel()
+        if job._cleanup_timer:
+            job._cleanup_timer.cancel()
 
     def get_best_job(self, protocol: StratumProtocol) -> Optional[MinerJob]:
         """Return best job for a miner."""

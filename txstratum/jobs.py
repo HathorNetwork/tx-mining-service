@@ -6,13 +6,16 @@
 import enum
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from hathorlib import BaseTransaction, Block
 from hathorlib.scripts import create_output_script
 
 import txstratum.time
 from txstratum.utils import tx_or_block_from_bytes
+
+if TYPE_CHECKING:
+    from asyncio import TimerHandle
 
 
 class JobStatus(enum.Enum):
@@ -65,6 +68,9 @@ class TxJob:
         self.total_time: Optional[float] = None
         self.nonce: Optional[bytes] = None
         self.timestamp: Optional[int] = None
+
+        self._timeout_timer: Optional[TimerHandle] = None
+        self._cleanup_timer: Optional[TimerHandle] = None
 
     def get_tx(self) -> BaseTransaction:
         """Return the Transaction object of this job."""
