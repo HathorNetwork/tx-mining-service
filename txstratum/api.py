@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
+from structlog import get_logger
 
 import txstratum.time
 from txstratum.jobs import JobStatus, TxJob
@@ -29,14 +30,18 @@ MAX_TIMESTAMP_DELTA: int = 300
 # Tx timeout (seconds)
 TX_TIMEOUT: float = 20.0
 
+logger = get_logger()
+
 
 class App:
     """API used to manage tx job."""
 
     def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
-                 max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None):
+                 max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None,
+                 fix_invalid_timestamp: bool = False):
         """Init App."""
         super().__init__()
+        self.log = logger.new()
         self.manager = manager
         self.max_tx_weight: float = max_tx_weight or MAX_TX_WEIGHT
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
@@ -47,6 +52,8 @@ class App:
         self.app.router.add_get('/job-status', self.job_status)
         self.app.router.add_post('/submit-job', self.submit_job)
         self.app.router.add_post('/cancel-job', self.cancel_job)
+
+        self.fix_invalid_timestamp: bool = fix_invalid_timestamp
 
     async def health_check(self, request: web.Request) -> web.Response:
         """Return that the service is running."""
@@ -85,10 +92,16 @@ class App:
             return web.json_response({'error': 'invalid-tx'}, status=400)
 
         if tx.weight > self.max_tx_weight:
+            self.log.debug('tx-weight-is-too-high', data=data)
             return web.json_response({'error': 'tx-weight-is-too-high'}, status=400)
 
-        if abs(tx.timestamp - txstratum.time.time()) > self.max_timestamp_delta:
-            return web.json_response({'error': 'tx-timestamp-invalid'}, status=400)
+        now = txstratum.time.time()
+        if abs(tx.timestamp - now) > self.max_timestamp_delta:
+            if self.fix_invalid_timestamp:
+                tx.timestamp = int(now)
+                tx_bytes = bytes(tx)
+            else:
+                return web.json_response({'error': 'tx-timestamp-invalid'}, status=400)
 
         if 'timeout' not in data:
             timeout = self.tx_timeout

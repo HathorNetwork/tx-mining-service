@@ -25,6 +25,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=float, default=None)
     parser.add_argument('--max-timestamp-delta', help='Maximum allowed tx timestamp delta', type=int, default=None)
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
+    parser.add_argument('--fix-invalid-timestamp', action='store_true', help='Fix invalid timestamp to current time')
     parser.add_argument('--prometheus', help='Path to export metrics for Prometheus', type=str, default=None)
     parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
     parser.add_argument('--address', help='Mining address for blocks', type=str, default=None)
@@ -68,8 +69,9 @@ def execute(args: Namespace) -> None:
         metrics.start()
 
     api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
-                  tx_timeout=args.tx_timeout)
-    logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout)
+                  tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp)
+    logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
+                max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp)
     web_runner = web.AppRunner(api_app.app)
     loop.run_until_complete(web_runner.setup())
     site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)
