@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import asyncio
 import json
+import traceback
 from asyncio import Future
 from collections import OrderedDict, namedtuple
 from contextlib import suppress
@@ -14,6 +15,8 @@ from structlog import get_logger
 from txstratum.constants import DEFAULT_EXPECTED_MINING_TIME
 
 if TYPE_CHECKING:
+    from asyncio.events import AbstractEventLoop
+
     from hathorlib import BaseTransaction
 
 logger = get_logger()
@@ -336,3 +339,42 @@ def tx_or_block_from_bytes(data: bytes) -> 'BaseTransaction':
     tx_version = TxVersion(version)
     cls = tx_version.get_cls()
     return cls.create_from_struct(data)
+
+
+def start_logging(loop: Optional['AbstractEventLoop'] = None) -> None:
+    """Initialize logging."""
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    def _exception_handler(loop: 'AbstractEventLoop', context: Dict[str, Any]) -> None:
+        """Handle unhandled exceptions in asyncio's main loop."""
+        message = context.get('message')
+        if not message:
+            message = 'Unhandled exception in event loop'
+
+        exc_info: Any
+        exception = context.get('exception')
+        if exception is not None:
+            exc_info = (type(exception), exception, exception.__traceback__)
+        else:
+            exc_info = False
+
+        extra = {}
+        for key in sorted(context):
+            if key in {'message', 'exception'}:
+                continue
+            value = context[key]
+            if key == 'source_traceback':
+                tb = ''.join(traceback.format_list(value))
+                value = 'Object created at (most recent call last):\n'
+                value += tb.rstrip()
+            elif key == 'handle_traceback':
+                tb = ''.join(traceback.format_list(value))
+                value = 'Handle created at (most recent call last):\n'
+                value += tb.rstrip()
+            else:
+                value = repr(value)
+            extra[key] = value
+        logger.exception(message, **extra, exc_info=exc_info)
+
+    loop.set_exception_handler(_exception_handler)
