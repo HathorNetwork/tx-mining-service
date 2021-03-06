@@ -39,8 +39,10 @@ def execute(args: Namespace) -> None:
 
     from txstratum.api import App
     from txstratum.manager import TxMiningManager
+    from txstratum.utils import start_logging
 
     # Configure log.
+    start_logging()
     if os.path.exists(args.log_config):
         logging.config.fileConfig(args.log_config)
         from structlog.stdlib import LoggerFactory
