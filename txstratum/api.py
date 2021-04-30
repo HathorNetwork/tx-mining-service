@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
+from hathorlib.scripts import P2PKH
 from structlog import get_logger
 
 import txstratum.time
@@ -40,7 +41,8 @@ class App:
 
     def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
                  max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None,
-                 fix_invalid_timestamp: bool = False, max_output_script_size: Optional[int] = None):
+                 fix_invalid_timestamp: bool = False, max_output_script_size: Optional[int] = None,
+                 only_standard_script: bool = True):
         """Init App."""
         super().__init__()
         self.log = logger.new()
@@ -49,6 +51,7 @@ class App:
         self.max_output_script_size = max_output_script_size or MAX_OUTPUT_SCRIPT_SIZE
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
+        self.only_standard_script: bool = only_standard_script
         self.app = web.Application()
         self.app.router.add_get('/health-check', self.health_check)
         self.app.router.add_get('/mining-status', self.mining_status)
@@ -102,6 +105,10 @@ class App:
             if len(txout.script) > self.max_output_script_size:
                 self.log.debug('txout-script-is-too-big', data=data)
                 return web.json_response({'error': 'txout-script-is-too-big'}, status=400)
+            if self.only_standard_script:
+                p2pkh = P2PKH.parse_script(txout.script)
+                if p2pkh is None:
+                    return web.json_response({'error': 'txout-non-standard-script'}, status=400)
 
         now = txstratum.time.time()
         if abs(tx.timestamp - now) > self.max_timestamp_delta:
