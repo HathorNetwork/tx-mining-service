@@ -7,7 +7,7 @@ LICENSE file in the root directory of this source tree.
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 
 import txstratum.time
-from txstratum.api import MAX_TIMESTAMP_DELTA, MAX_TX_WEIGHT, App
+from txstratum.api import MAX_OUTPUT_SCRIPT_SIZE, MAX_TIMESTAMP_DELTA, MAX_TX_WEIGHT, App
 from txstratum.manager import TxMiningManager
 from txstratum.utils import tx_or_block_from_bytes
 
@@ -197,6 +197,18 @@ class AppTestCase(AioHTTPTestCase):
         data = await resp.json()
         self.assertEqual(400, resp.status)
         self.assertEqual({'error': 'tx-weight-is-too-high'}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_invalid_output_script_size(self):
+        tx_bytes = update_timestamp(TX1_DATA)
+        tx = tx_or_block_from_bytes(tx_bytes)
+        tx.outputs[0].script = b'x' * (MAX_OUTPUT_SCRIPT_SIZE + 1)
+        tx_bytes = bytes(tx)
+        tx_hex = tx_bytes.hex()
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({'error': 'txout-script-is-too-big'}, data)
 
     @unittest_run_loop
     async def test_submit_job_invalid_timeout(self):
