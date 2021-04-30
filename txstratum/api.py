@@ -19,9 +19,11 @@ if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager
 
 
+# Default maximum txout script size (in bytes).
+MAX_OUTPUT_SCRIPT_SIZE = 256
+
 # Default maximum tx weight allowed to be mined in this server.
 MAX_TX_WEIGHT: float = 35.0
-
 
 # Maximum difference between tx timestamp and current time.
 MAX_TIMESTAMP_DELTA: int = 300
@@ -38,12 +40,13 @@ class App:
 
     def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
                  max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None,
-                 fix_invalid_timestamp: bool = False):
+                 fix_invalid_timestamp: bool = False, max_output_script_size: Optional[int] = None):
         """Init App."""
         super().__init__()
         self.log = logger.new()
         self.manager = manager
         self.max_tx_weight: float = max_tx_weight or MAX_TX_WEIGHT
+        self.max_output_script_size = max_output_script_size or MAX_OUTPUT_SCRIPT_SIZE
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.app = web.Application()
@@ -94,6 +97,11 @@ class App:
         if tx.weight > self.max_tx_weight:
             self.log.debug('tx-weight-is-too-high', data=data)
             return web.json_response({'error': 'tx-weight-is-too-high'}, status=400)
+
+        for txout in tx.outputs:
+            if len(txout.script) > self.max_output_script_size:
+                self.log.debug('txout-script-is-too-big', data=data)
+                return web.json_response({'error': 'txout-script-is-too-big'}, status=400)
 
         now = txstratum.time.time()
         if abs(tx.timestamp - now) > self.max_timestamp_delta:
