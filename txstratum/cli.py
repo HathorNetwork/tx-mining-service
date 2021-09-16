@@ -29,6 +29,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--prometheus', help='Path to export metrics for Prometheus', type=str, default=None)
     parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
     parser.add_argument('--address', help='Mining address for blocks', type=str, default=None)
+    parser.add_argument('--allow-non-standard-script', action='store_true', help='Accept mining non-standard tx')
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
     return parser
 
@@ -71,9 +72,11 @@ def execute(args: Namespace) -> None:
         metrics.start()
 
     api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
-                  tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp)
+                  tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp,
+                  only_standard_script=not args.allow_non_standard_script)
     logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
-                max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp)
+                max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
+                only_standard_script=api_app.only_standard_script)
     web_runner = web.AppRunner(api_app.app)
     loop.run_until_complete(web_runner.setup())
     site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)
