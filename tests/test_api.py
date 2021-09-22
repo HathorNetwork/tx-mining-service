@@ -221,7 +221,7 @@ class AppTestCase(AioHTTPTestCase):
         resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
         data = await resp.json()
         self.assertEqual(400, resp.status)
-        self.assertEqual({'error': 'txout-script-is-too-big'}, data)
+        self.assertEqual({'error': 'tx-non-standard'}, data)
 
     @unittest_run_loop
     async def test_submit_job_invalid_non_standard_script(self):
@@ -233,7 +233,7 @@ class AppTestCase(AioHTTPTestCase):
         resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
         data = await resp.json()
         self.assertEqual(400, resp.status)
-        self.assertEqual({'error': 'txout-non-standard-script'}, data)
+        self.assertEqual({'error': 'tx-non-standard'}, data)
 
     @unittest_run_loop
     async def test_submit_job_invalid_timeout(self):
