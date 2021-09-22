@@ -163,7 +163,7 @@ pydocstyle = ">=2.1"
 
 [[package]]
 name = "hathorlib"
-version = "0.1.0"
+version = "0.1.1"
 description = "Hathor Network base objects library"
 category = "main"
 optional = false
@@ -494,7 +494,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pyt
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6,<4.0"
-content-hash = "2e0a674abb3518bdbba6a1a0d7d9299fc2b8d07bfa0dd942af5590d8dd49fb43"
+content-hash = "1a03b6b945181965452f770533ba63207040b7bf04a0c4e1fcd3e2220a21bc69"
 
 [metadata.files]
 aiohttp = [
@@ -696,8 +696,8 @@ flake8-docstrings = [
     {file = "flake8_docstrings-1.5.0-py2.py3-none-any.whl", hash = "sha256:a256ba91bc52307bef1de59e2a009c3cf61c3d0952dbe035d6ff7208940c2edc"},
 ]
 hathorlib = [
-    {file = "hathorlib-0.1.0-py3-none-any.whl", hash = "sha256:2e4cff8173d282c955a6363078716f10017e7a73096c0d4afcfd92ae469e841e"},
-    {file = "hathorlib-0.1.0.tar.gz", hash = "sha256:ce6dec2227495c2723520cc2c3d86b596e775893d0502d33e9ded96d2770bdee"},
+    {file = "hathorlib-0.1.1-py3-none-any.whl", hash = "sha256:700eed982954249cff2d0dcfa80b0fb6e1638c21451e6e673ab34c2ed97b5903"},
+    {file = "hathorlib-0.1.1.tar.gz", hash = "sha256:5200d711ba719d310e76136e74208536656961d07a28af5aef49db95ec44864e"},
 ]
 idna = [
     {file = "idna-3.1-py3-none-any.whl", hash = "sha256:5205d03e7bcbb919cc9c19885f9920d622ca52448306f2377daede5cf3faac16"},
