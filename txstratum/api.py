@@ -101,8 +101,8 @@ class App:
             return web.json_response({'error': 'tx-weight-is-too-high'}, status=400)
 
         if not tx.is_standard(self.max_output_script_size, self.only_standard_script):
-            self.log.debug('tx-non-standard', data=data)
-            return web.json_response({'error': 'tx-non-standard'}, status=400)
+            self.log.debug('non-standard-tx', data=data)
+            return web.json_response({'error': 'non-standard-tx'}, status=400)
 
         now = txstratum.time.time()
         if abs(tx.timestamp - now) > self.max_timestamp_delta:
