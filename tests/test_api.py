@@ -40,6 +40,19 @@ TOKEN_CREATION_TX_DATA = bytes.fromhex(
 )
 TOKEN_CREATION_TX_NONCE = '01ff7369'
 
+NFT_CREATION_TX_DATA = bytes.fromhex(
+    '00020102000000006effb1f045764bc2cf04f9d3018618d3ea15d7adb4002eb3db33b2d800006b48'
+    '30460221008d3725e59935d0f60c63a5b5f865d845252dbdf3c38de5c1d55dc4bebf07a983022100'
+    'b34bc7e1f1867e53c43add5b7eceb81c73026860b399a3a1793731baae9050772102bec1ec6ecb43'
+    'f11f88b8d50ad82bb210091d4bdc6ea0bfd23cfc3d3bb78b4db10000000100004a48697066733a2f'
+    '2f697066732f516d565261616f4469354432546d77584e47574c645852786b4b387534676d6f6b50'
+    '4a694638715155504d4b4a712f6d657461646174612e6a736f6eac0000009601001976a9142322ee'
+    '79e8d22496c9d62419a8c34c551f5eb25088ac0113436174686f72202f2039204c69766573203031'
+    '05394c5653314031b0e6a7f0a81b61328f8a0200000000ecec46f82cbbb955347d90d04d6f5f97c8'
+    '6c6b13b7cfbdff1a552f41000000006effb1f045764bc2cf04f9d3018618d3ea15d7adb4002eb3db'
+    '33b2d88d6802f7'
+)
+
 
 def update_timestamp(tx_bytes: bytes, *, delta: int = 0) -> bytes:
     """Update timestamp to current timestamp."""
@@ -208,7 +221,7 @@ class AppTestCase(AioHTTPTestCase):
         resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
         data = await resp.json()
         self.assertEqual(400, resp.status)
-        self.assertEqual({'error': 'txout-script-is-too-big'}, data)
+        self.assertEqual({'error': 'non-standard-tx'}, data)
 
     @unittest_run_loop
     async def test_submit_job_invalid_non_standard_script(self):
@@ -220,7 +233,7 @@ class AppTestCase(AioHTTPTestCase):
         resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
         data = await resp.json()
         self.assertEqual(400, resp.status)
-        self.assertEqual({'error': 'txout-non-standard-script'}, data)
+        self.assertEqual({'error': 'non-standard-tx'}, data)
 
     @unittest_run_loop
     async def test_submit_job_invalid_timeout(self):
@@ -284,6 +297,23 @@ class AppTestCase(AioHTTPTestCase):
     @unittest_run_loop
     async def test_submit_job_success_token_creation(self):
         tx_hex = update_timestamp(TOKEN_CREATION_TX_DATA).hex()
+        resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
+        data1 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        resp = await self.client.request('GET', '/job-status', params={'job-id': data1['job_id']})
+        data2 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        self.assertEqual(data1, data2)
+
+        resp = await self.client.request('POST', '/cancel-job', params={'job-id': data1['job_id']})
+        data1 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+    @unittest_run_loop
+    async def test_submit_job_success_nft_creation(self):
+        tx_hex = update_timestamp(NFT_CREATION_TX_DATA).hex()
         resp = await self.client.request('POST', '/submit-job', json={'tx': tx_hex})
         data1 = await resp.json()
         self.assertEqual(200, resp.status)

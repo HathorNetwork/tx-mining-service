@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Optional
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
-from hathorlib.scripts import P2PKH
 from structlog import get_logger
 
 import txstratum.time
@@ -101,14 +100,9 @@ class App:
             self.log.debug('tx-weight-is-too-high', data=data)
             return web.json_response({'error': 'tx-weight-is-too-high'}, status=400)
 
-        for txout in tx.outputs:
-            if len(txout.script) > self.max_output_script_size:
-                self.log.debug('txout-script-is-too-big', data=data)
-                return web.json_response({'error': 'txout-script-is-too-big'}, status=400)
-            if self.only_standard_script:
-                p2pkh = P2PKH.parse_script(txout.script)
-                if p2pkh is None:
-                    return web.json_response({'error': 'txout-non-standard-script'}, status=400)
+        if not tx.is_standard(self.max_output_script_size, self.only_standard_script):
+            self.log.debug('non-standard-tx', data=data)
+            return web.json_response({'error': 'non-standard-tx'}, status=400)
 
         now = txstratum.time.time()
         if abs(tx.timestamp - now) > self.max_timestamp_delta:
