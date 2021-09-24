@@ -18,6 +18,11 @@ To install dependencies, run `poetry install`.
 
     python main.py https://node1.mainnet.hathor.network/
 
+Or you can use the Docker image
+
+    docker build -t tx-mining-service .
+    docker run -it --network="host" tx-mining-service <full-node-address:port> --address <mining-reward-address> --api-port 8080 --stratum-port 8000
+
 
 ## How to test?
 
