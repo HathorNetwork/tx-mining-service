@@ -1,21 +1,19 @@
-# set base image (host OS)
-FROM python:3.8-slim
+FROM python:3.8-slim as build
 
-# set the working directory in the container
 WORKDIR /code
 
-# install poetry
-RUN pip install 'poetry==1.1.6'
+RUN pip install --no-cache-dir 'poetry==1.1.6'
 
-# copy the dependencies file to the working directory
 COPY poetry.lock pyproject.toml /code/
 
-# install dependencies
 RUN poetry config virtualenvs.create false \
   && poetry install --no-dev --no-interaction --no-ansi
 
-# copy the content of the local src directory to the working directory
-COPY . .
-# command to run on container start
+FROM python:3.8-alpine
 
-ENTRYPOINT ["poetry", "run", "python", "main.py"]
+COPY --from=build /usr/local/lib/python3.8/site-packages /usr/local/lib/python3.8/site-packages
+
+COPY txstratum/ ./txstratum
+COPY main.py log.conf ./
+
+ENTRYPOINT ["python", "-m", "main"]
