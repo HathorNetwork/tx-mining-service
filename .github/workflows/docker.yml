@@ -23,8 +23,7 @@ jobs:
       uses: docker/build-push-action@a66e35b9cbcf4ad0ea91ffcaf7bbad63ad9e0229
       with:
         push: true
-        # tags: hathornetwork/tx-mining-service:latest,hathornetwork/tx-mining-service:${{ steps.vars.outputs.tag }}
-        tags: luislhl/tx-mining-service:latest,luislhl/tx-mining-service:${{ steps.vars.outputs.tag }}
+        tags: hathornetwork/tx-mining-service:latest,hathornetwork/tx-mining-service:${{ steps.vars.outputs.tag }}
         platforms: linux/amd64,linux/arm64
         cache-from: type=gha
         cache-to: type=gha,mode=max
