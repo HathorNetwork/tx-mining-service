@@ -4,11 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Set
 
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
+from hathorlib.scripts import P2PKH
 from structlog import get_logger
 
 import txstratum.time
@@ -51,6 +52,8 @@ class App:
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.only_standard_script: bool = only_standard_script
+        self.banned_tx_ids: Set[bytes] = set()
+        self.banned_addresses: Set[str] = set()
         self.app = web.Application()
         self.app.router.add_get('/health-check', self.health_check)
         self.app.router.add_get('/mining-status', self.mining_status)
@@ -81,19 +84,24 @@ class App:
         try:
             data = await request.json()
         except json.decoder.JSONDecodeError:
+            self.log.debug('cannot-decode-json')
             return web.json_response({'error': 'cannot-decode-json'}, status=400)
         if not isinstance(data, dict):
+            self.log.debug('json-must-be-an-object', data=data)
             return web.json_response({'error': 'json-must-be-an-object'}, status=400)
         tx_hex = data.get('tx')
         if not tx_hex:
+            self.log.debug('missing-tx', data=data)
             return web.json_response({'error': 'missing-tx'}, status=400)
         try:
             tx_bytes = bytes.fromhex(tx_hex)
             tx = tx_or_block_from_bytes(tx_bytes)
         except (ValueError, TxValidationError):
+            self.log.debug('invalid-tx(1)', data=data)
             return web.json_response({'error': 'invalid-tx'}, status=400)
 
         if not isinstance(tx, (Transaction, TokenCreationTransaction)):
+            self.log.debug('invalid-tx(2)', data=data)
             return web.json_response({'error': 'invalid-tx'}, status=400)
 
         if tx.weight > self.max_tx_weight:
@@ -104,12 +112,29 @@ class App:
             self.log.debug('non-standard-tx', data=data)
             return web.json_response({'error': 'non-standard-tx'}, status=400)
 
+        # Check for banned inputs.
+        for txin in tx.inputs:
+            if txin.tx_id in self.banned_tx_ids:
+                self.log.info('txin-banned', data=data)
+                return web.json_response({'error': 'invalid-tx'}, status=400)
+
+        # Check for banned addresses.
+        for txout in tx.outputs:
+            p2pkh = P2PKH.parse_script(txout.script)
+            if p2pkh is not None:
+                self.log.info('p2pkh.address', address=p2pkh.address)
+                if p2pkh.address in self.banned_addresses:
+                    self.log.info('banned-address', data=data)
+                    return web.json_response({'error': 'invalid-tx'}, status=400)
+
         now = txstratum.time.time()
         if abs(tx.timestamp - now) > self.max_timestamp_delta:
             if self.fix_invalid_timestamp:
+                self.log.debug('fixing invalid timestamp...', data=data)
                 tx.timestamp = int(now)
                 tx_bytes = bytes(tx)
             else:
+                self.log.debug('tx-timestamp-invalid', data=data)
                 return web.json_response({'error': 'tx-timestamp-invalid'}, status=400)
 
         if 'timeout' not in data:
@@ -118,9 +143,11 @@ class App:
             try:
                 timeout = min(self.tx_timeout, float(data['timeout']))
             except ValueError:
+                self.log.debug('invalid-timeout(1)', data=data)
                 return web.json_response({'error': 'invalid-timeout'}, status=400)
 
             if timeout <= 0:
+                self.log.debug('invalid-timeout(2)', data=data)
                 return web.json_response({'error': 'invalid-timeout'}, status=400)
 
         add_parents = data.get('add_parents', False)
@@ -129,6 +156,7 @@ class App:
         job = TxJob(tx_bytes, add_parents=add_parents, propagate=propagate, timeout=timeout)
         success = self.manager.add_job(job)
         if not success:
+            self.log.debug('job-already-exists', data=data)
             return web.json_response({'error': 'job-already-exists'}, status=400)
         return web.json_response(job.to_dict())
 
