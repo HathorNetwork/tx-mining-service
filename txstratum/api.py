@@ -18,6 +18,7 @@ from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager
+    from txstratum.toi_client import TOIAsyncClient
 
 
 # Default maximum txout script size (in bytes).
@@ -42,7 +43,7 @@ class App:
     def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
                  max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None,
                  fix_invalid_timestamp: bool = False, max_output_script_size: Optional[int] = None,
-                 only_standard_script: bool = True):
+                 only_standard_script: bool = True, toiclient: Optional['TOIAsyncClient'] = None):
         """Init App."""
         super().__init__()
         self.log = logger.new()
@@ -52,8 +53,7 @@ class App:
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.only_standard_script: bool = only_standard_script
-        self.banned_tx_ids: Set[bytes] = set()
-        self.banned_addresses: Set[str] = set()
+        self.toiclient = toiclient
         self.app = web.Application()
         self.app.router.add_get('/health-check', self.health_check)
         self.app.router.add_get('/mining-status', self.mining_status)
@@ -112,20 +112,23 @@ class App:
             self.log.debug('non-standard-tx', data=data)
             return web.json_response({'error': 'non-standard-tx'}, status=400)
 
-        # Check for banned inputs.
-        for txin in tx.inputs:
-            if txin.tx_id in self.banned_tx_ids:
-                self.log.info('txin-banned', data=data)
-                return web.json_response({'error': 'invalid-tx'}, status=400)
+        if self.toiclient:
+            # Check for banned txs and addresses.
+            txs: Set[str] = set()
+            addrs: Set[str] = set()
+            for txin in tx.inputs:
+                txs.add(txin.tx_id.decode())
 
-        # Check for banned addresses.
-        for txout in tx.outputs:
-            p2pkh = P2PKH.parse_script(txout.script)
-            if p2pkh is not None:
-                self.log.info('p2pkh.address', address=p2pkh.address)
-                if p2pkh.address in self.banned_addresses:
-                    self.log.info('banned-address', data=data)
-                    return web.json_response({'error': 'invalid-tx'}, status=400)
+            for txout in tx.outputs:
+                p2pkh = P2PKH.parse_script(txout.script)
+                if p2pkh is not None:
+                    self.log.info('p2pkh.address', address=p2pkh.address)
+                    addrs.add(p2pkh.address)
+
+            toiresp = await self.toiclient.check_blacklist(tx_ids=list(txs), addresses=list(addrs))
+            if toiresp.blacklisted:
+                self.log.info('banned', data=data, issues=toiresp.issues)
+                return web.json_response({'error': 'invalid-tx'}, status=400)
 
         now = txstratum.time.time()
         if abs(tx.timestamp - now) > self.max_timestamp_delta:
