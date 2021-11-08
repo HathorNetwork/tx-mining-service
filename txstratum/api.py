@@ -117,12 +117,12 @@ class App:
             txs: Set[str] = set()
             addrs: Set[str] = set()
             for txin in tx.inputs:
-                txs.add(txin.tx_id.decode())
+                txs.add(txin.tx_id.hex())
 
             for txout in tx.outputs:
                 p2pkh = P2PKH.parse_script(txout.script)
                 if p2pkh is not None:
-                    self.log.info('p2pkh.address', address=p2pkh.address)
+                    self.log.debug('p2pkh.address', address=p2pkh.address)
                     addrs.add(p2pkh.address)
 
             toiresp = await self.toiclient.check_blacklist(tx_ids=list(txs), addresses=list(addrs))
