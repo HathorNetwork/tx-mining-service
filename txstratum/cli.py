@@ -30,6 +30,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
     parser.add_argument('--address', help='Mining address for blocks', type=str, default=None)
     parser.add_argument('--allow-non-standard-script', action='store_true', help='Accept mining non-standard tx')
+    parser.add_argument('--ban-tx-ids', help='File with list of banned tx ids', type=str, default=None)
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
     return parser
 
@@ -77,6 +78,17 @@ def execute(args: Namespace) -> None:
     logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
                 max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
                 only_standard_script=api_app.only_standard_script)
+
+    if args.ban_tx_ids:
+        fp = open(args.ban_tx_ids, 'r')
+        for line in fp:
+            line = line.strip()
+            if not line:
+                continue
+            logger.info('Added to banned tx ids', txid=line)
+            api_app.banned_tx_ids.add(bytes.fromhex(line))
+        fp.close()
+
     web_runner = web.AppRunner(api_app.app)
     loop.run_until_complete(web_runner.setup())
     site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)
