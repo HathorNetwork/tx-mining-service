@@ -4,12 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import TYPE_CHECKING, Optional, Set
+from typing import TYPE_CHECKING, List, Optional
 
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
-from hathorlib.scripts import P2PKH
 from structlog import get_logger
 
 import txstratum.time
@@ -17,8 +16,8 @@ from txstratum.jobs import JobStatus, TxJob
 from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
+    from txstratum.filters import TXFilter
     from txstratum.manager import TxMiningManager
-    from txstratum.toi_client import TOIAsyncClient
 
 
 # Default maximum txout script size (in bytes).
@@ -43,7 +42,7 @@ class App:
     def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
                  max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None,
                  fix_invalid_timestamp: bool = False, max_output_script_size: Optional[int] = None,
-                 only_standard_script: bool = True, toiclient: Optional['TOIAsyncClient'] = None):
+                 only_standard_script: bool = True, tx_filters: Optional[List['TXFilter']] = None):
         """Init App."""
         super().__init__()
         self.log = logger.new()
@@ -53,7 +52,7 @@ class App:
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.only_standard_script: bool = only_standard_script
-        self.toiclient = toiclient
+        self.tx_filters = tx_filters or []
         self.app = web.Application()
         self.app.router.add_get('/health-check', self.health_check)
         self.app.router.add_get('/mining-status', self.mining_status)
@@ -112,22 +111,8 @@ class App:
             self.log.debug('non-standard-tx', data=data)
             return web.json_response({'error': 'non-standard-tx'}, status=400)
 
-        if self.toiclient:
-            # Check for banned txs and addresses.
-            txs: Set[str] = set()
-            addrs: Set[str] = set()
-            for txin in tx.inputs:
-                txs.add(txin.tx_id.hex())
-
-            for txout in tx.outputs:
-                p2pkh = P2PKH.parse_script(txout.script)
-                if p2pkh is not None:
-                    self.log.debug('p2pkh.address', address=p2pkh.address)
-                    addrs.add(p2pkh.address)
-
-            toiresp = await self.toiclient.check_blacklist(tx_ids=list(txs), addresses=list(addrs))
-            if toiresp.blacklisted:
-                self.log.info('banned', data=data, issues=toiresp.issues)
+        for tx_filter in self.tx_filters:
+            if tx_filter.check_tx(tx, data):
                 return web.json_response({'error': 'invalid-tx'}, status=400)
 
         now = txstratum.time.time()

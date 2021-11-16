@@ -7,7 +7,7 @@ import logging
 import logging.config
 import os
 from argparse import ArgumentParser, Namespace
-from typing import Optional
+from typing import List, Optional, Set
 
 import structlog
 from aiohttp import web
@@ -31,6 +31,8 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
     parser.add_argument('--address', help='Mining address for blocks', type=str, default=None)
     parser.add_argument('--allow-non-standard-script', action='store_true', help='Accept mining non-standard tx')
+    parser.add_argument('--ban-tx-ids', help='File with list of banned tx ids', type=str, default=None)
+    parser.add_argument('--ban-addrs', help='File with list of banned addresses', type=str, default=None)
     parser.add_argument('--toi-apikey', help='apikey for toi service', type=str, default=None)
     parser.add_argument('--toi-url', help='toi service url', type=str, default=None)
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
@@ -42,6 +44,7 @@ def execute(args: Namespace) -> None:
     from hathorlib.client import HathorClient
 
     from txstratum.api import App
+    from txstratum.filters import FileFilter, TOIFilter, TXFilter
     from txstratum.manager import TxMiningManager
     from txstratum.toi_client import TOIAsyncClient
     from txstratum.utils import start_logging
@@ -69,19 +72,48 @@ def execute(args: Namespace) -> None:
     loop.run_until_complete(backend.start())
     loop.run_until_complete(manager.start())
     server = loop.run_until_complete(loop.create_server(manager, '0.0.0.0', args.stratum_port))
+    tx_filters: List[TXFilter] = []
     toiclient: Optional[TOIAsyncClient] = None
+    banned_tx_ids: Set[bytes] = set()
+    banned_addrs: Set[str] = set()
 
     if args.prometheus:
         from txstratum.prometheus import PrometheusExporter
         metrics = PrometheusExporter(manager, args.prometheus)
         metrics.start()
 
-    if args.toi_url and args.toi_apikey:
+    if args.ban_tx_ids:
+        fp = open(args.ban_tx_ids, 'r')
+        for line in fp:
+            line = line.strip()
+            if not line:
+                continue
+            logger.info('Added to banned tx ids', txid=line)
+            banned_tx_ids.add(bytes.fromhex(line))
+        fp.close()
+
+    if args.ban_addrs:
+        fp = open(args.ban_addrs, 'r')
+        for line in fp:
+            line = line.strip()
+            if not line:
+                continue
+            logger.info('Added to banned addresses', txid=line)
+            banned_addrs.add(line)
+        fp.close()
+
+    if len(banned_addrs | banned_tx_ids):
+        tx_filters.append(FileFilter(banned_tx_ids, banned_addrs))
+
+    if args.toi_url or args.toi_apikey:
+        if not (args.toi_url and args.toi_apikey):
+            raise ValueError("Should pass both toi_url and toi_apikey")
         toiclient = TOIAsyncClient(args.toi_url, args.toi_apikey)
+        tx_filters.append(TOIFilter(toiclient))
 
     api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
                   tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp,
-                  only_standard_script=not args.allow_non_standard_script, toiclient=toiclient)
+                  only_standard_script=not args.allow_non_standard_script, tx_filters=tx_filters)
     logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
                 max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
                 only_standard_script=api_app.only_standard_script)
