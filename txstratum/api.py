@@ -112,7 +112,7 @@ class App:
             return web.json_response({'error': 'non-standard-tx'}, status=400)
 
         for tx_filter in self.tx_filters:
-            if tx_filter.check_tx(tx, data):
+            if await tx_filter.check_tx(tx, data):
                 return web.json_response({'error': 'invalid-tx'}, status=400)
 
         now = txstratum.time.time()
