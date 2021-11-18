@@ -8,15 +8,15 @@ from typing import List
 from unittest.mock import AsyncMock
 
 import asynctest  # type: ignore
-from hathorlib.transaction import Transaction, TxInput, TxOutput
 from hathorlib.scripts import P2PKH
+from hathorlib.transaction import Transaction, TxInput, TxOutput
 from hathorlib.utils import decode_address
 
 from txstratum.filters import FileFilter, TOIFilter
 from txstratum.toi_client import CheckBlacklist
 
 
-def create_tx_from(inputs: TxInput, outputs: TxOutput):
+def create_tx_from(inputs: List[TxInput], outputs: List[TxOutput]) -> Transaction:
     tx = Transaction()
     tx.inputs.extend(inputs or [TxInput(tx_id=bytes.fromhex('0000cafe' * 8), index=0, data=bytes.fromhex('cafe'))])
     tx.outputs.extend(
@@ -27,7 +27,7 @@ def create_tx_from(inputs: TxInput, outputs: TxOutput):
     return tx
 
 
-def create_tx_with(in_txs: List[bytes] = [], out_addresses: List[str] = []):
+def create_tx_with(in_txs: List[bytes] = [], out_addresses: List[str] = []) -> Transaction:
     inputs = []
     outputs = []
     for tx_id in in_txs:
