@@ -13,6 +13,12 @@ from structlog import get_logger
 logger = get_logger()
 
 
+class TOIError(Exception):
+    """Raised upon any unexpected responses from toi service."""
+
+    pass
+
+
 @dataclass
 class CheckBlacklist:
     """Class to parse return from TOI Service /check/blacklist/ API."""
@@ -76,10 +82,10 @@ class TOIAsyncClient:
             if response.status == 200:
                 r = await response.json()
                 return CheckBlacklist(**r)
+            body = await response.text()
             self.log.warning(
                 message='TOI Service unexpected response',
                 status=response.status,
-                body=await response.text(),
+                body=body,
             )
-            # XXX: Allow if service fails call
-            return CheckBlacklist(blacklisted=False)
+            raise TOIError(body)

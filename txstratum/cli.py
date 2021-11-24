@@ -7,7 +7,7 @@ import logging
 import logging.config
 import os
 from argparse import ArgumentParser, Namespace
-from typing import List, Optional, Set
+from typing import List, Optional
 
 import structlog
 from aiohttp import web
@@ -74,36 +74,14 @@ def execute(args: Namespace) -> None:
     server = loop.run_until_complete(loop.create_server(manager, '0.0.0.0', args.stratum_port))
     tx_filters: List[TXFilter] = []
     toiclient: Optional[TOIAsyncClient] = None
-    banned_tx_ids: Set[bytes] = set()
-    banned_addrs: Set[str] = set()
 
     if args.prometheus:
         from txstratum.prometheus import PrometheusExporter
         metrics = PrometheusExporter(manager, args.prometheus)
         metrics.start()
 
-    if args.ban_tx_ids:
-        fp = open(args.ban_tx_ids, 'r')
-        for line in fp:
-            line = line.strip()
-            if not line:
-                continue
-            logger.info('Added to banned tx ids', txid=line)
-            banned_tx_ids.add(bytes.fromhex(line))
-        fp.close()
-
-    if args.ban_addrs:
-        fp = open(args.ban_addrs, 'r')
-        for line in fp:
-            line = line.strip()
-            if not line:
-                continue
-            logger.info('Added to banned addresses', txid=line)
-            banned_addrs.add(line)
-        fp.close()
-
-    if len(banned_addrs | banned_tx_ids):
-        tx_filters.append(FileFilter(banned_tx_ids, banned_addrs))
+    if args.ban_addrs or args.ban_tx_ids:
+        tx_filters.append(FileFilter.load_from_files(args.ban_tx_ids, args.ban_addrs))
 
     if args.toi_url or args.toi_apikey:
         if not (args.toi_url and args.toi_apikey):
@@ -116,7 +94,7 @@ def execute(args: Namespace) -> None:
                   only_standard_script=not args.allow_non_standard_script, tx_filters=tx_filters)
     logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
                 max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
-                only_standard_script=api_app.only_standard_script)
+                only_standard_script=api_app.only_standard_script, tx_filters=tx_filters)
 
     web_runner = web.AppRunner(api_app.app)
     loop.run_until_complete(web_runner.setup())
@@ -132,8 +110,8 @@ def execute(args: Namespace) -> None:
     except KeyboardInterrupt:
         logger.info('Stopping...')
 
-    if toiclient is not None:
-        loop.run_until_complete(toiclient.close())
+    for tx_filter in tx_filters:
+        loop.run_until_complete(tx_filter.close())
     server.close()
     loop.run_until_complete(server.wait_closed())
     loop.run_until_complete(backend.stop())

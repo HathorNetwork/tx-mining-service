@@ -4,10 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Set
+from typing import TYPE_CHECKING, Any, Optional, Set
 
 from hathorlib.scripts import P2PKH
 from structlog import get_logger
+
+from txstratum.toi_client import TOIError
 
 if TYPE_CHECKING:
     from hathorlib import BaseTransaction
@@ -26,6 +28,11 @@ class TXFilter(ABC):
         """Return if the tx should be blocked."""
         raise NotImplementedError
 
+    @abstractmethod
+    async def close(self) -> None:
+        """Close any open session."""
+        raise NotImplementedError
+
 
 class FileFilter(TXFilter):
     """Filter tx based on a set of banned tx_ids and addresses."""
@@ -36,11 +43,39 @@ class FileFilter(TXFilter):
         self.banned_tx_ids = banned_tx_ids
         self.banned_addresses = banned_addresses
 
+    @classmethod
+    def load_from_files(cls, tx_filename: Optional[str], address_filename: Optional[str]) -> 'FileFilter':
+        """Load banned tx and addresses from files and return an instance of FileFilter."""
+        file_filter = cls()
+        if tx_filename:
+            with open(tx_filename, 'r') as fp:
+                for line in fp:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    file_filter.log.info('Added to banned tx ids', txid=line)
+                    file_filter.banned_tx_ids.add(bytes.fromhex(line))
+
+        if address_filename:
+            with open(address_filename, 'r') as fp:
+                for line in fp:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    file_filter.log.info('Added to banned addresses', txid=line)
+                    file_filter.banned_addresses.add(line)
+        return file_filter
+
+    async def close(self) -> None:
+        """Nothing to do here."""
+        return
+
     async def check_tx(self, tx: 'BaseTransaction', data: Any) -> bool:
         """Return if the tx should be blocked."""
         if len(self.banned_tx_ids):
             for txin in tx.inputs:
                 if txin.tx_id in self.banned_tx_ids:
+                    self.log.info('banned-tx', data=data)
                     return True
 
         if len(self.banned_addresses):
@@ -62,6 +97,10 @@ class TOIFilter(TXFilter):
         self.client = client
         self.log = logger.new()
 
+    async def close(self) -> None:
+        """Close toi client."""
+        await self.client.close()
+
     async def check_tx(self, tx: 'BaseTransaction', data: Any) -> bool:
         """Return if the tx should be blocked."""
         txs: Set[str] = set()
@@ -75,7 +114,13 @@ class TOIFilter(TXFilter):
                 self.log.debug('p2pkh.address', address=p2pkh.address)
                 addrs.add(p2pkh.address)
 
-        resp = await self.client.check_blacklist(tx_ids=list(txs), addresses=list(addrs))
-        if resp.blacklisted:
-            self.log.info('banned', data=data, issues=resp.issues)
-        return resp.blacklisted
+        try:
+            resp = await self.client.check_blacklist(tx_ids=list(txs), addresses=list(addrs))
+            if resp.blacklisted:
+                self.log.info('banned', data=data, issues=resp.issues)
+            return resp.blacklisted
+        except TOIError as ex:
+            # TOI Service error
+            self.log.error("toi_service_error", body=str(ex))
+            # Block request
+            return True
