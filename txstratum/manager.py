@@ -139,7 +139,10 @@ class TxMiningManager:
             except ValueError:
                 # This means another miner submitted a solution shortly before
                 #  and so the txJob has been already removed from the queue
-                self.log.warning('Tried removing tx_job from the queue but the queue does not contain this tx_job. Probably because 2 miners found a solution for it at the same time.')
+                self.log.warning((
+                    f"Tried removing tx_job from the queue but the queue does not contain this tx_job. "
+                    f"Probably because 2 miners found a solution for it at the same time."
+                ))
                 return
             # Schedule to clean it up.
             self.schedule_job_clean_up(tx_job)
