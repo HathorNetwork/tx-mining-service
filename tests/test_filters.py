@@ -13,7 +13,7 @@ from hathorlib.transaction import Transaction, TxInput, TxOutput
 from hathorlib.utils import decode_address
 
 from txstratum.filters import FileFilter, TOIFilter
-from txstratum.toi_client import CheckBlacklist
+from txstratum.toi_client import CheckBlacklist, TOIError
 
 
 class AsyncMock(MagicMock):  # type: ignore
@@ -82,7 +82,6 @@ class FiltersTestCase(asynctest.ClockedTestCase):  # type: ignore
         assert resp_ok_id is False
 
     async def test_toi_filter_ok(self):
-        # client = MagicMock(TOIAsyncClient)
         ok_resp = CheckBlacklist(blacklisted=False, issues={})
         client = AsyncMock()
         client.check_blacklist = AsyncMock(return_value=ok_resp)
@@ -91,10 +90,23 @@ class FiltersTestCase(asynctest.ClockedTestCase):  # type: ignore
         assert resp is False
 
     async def test_toi_filter_fail(self):
-        # client = MagicMock(TOIAsyncClient)
         fail_resp = CheckBlacklist(blacklisted=True, issues={})
         client = AsyncMock()
         client.check_blacklist = AsyncMock(return_value=fail_resp)
         toi_filter = TOIFilter(client)
         resp = await toi_filter.check_tx(create_tx_from([], []), data=None)
         assert resp is True
+
+    async def test_toi_fail_block(self):
+        client = AsyncMock()
+        client.check_blacklist = AsyncMock(side_effect=TOIError('error'))
+        toi_filter = TOIFilter(client, block=True)
+        resp = await toi_filter.check_tx(create_tx_from([], []), data=None)
+        assert resp is True
+
+    async def test_toi_fail_pass(self):
+        client = AsyncMock()
+        client.check_blacklist = AsyncMock(side_effect=TOIError('error'))
+        toi_filter = TOIFilter(client, block=False)
+        resp = await toi_filter.check_tx(create_tx_from([], []), data=None)
+        assert resp is False

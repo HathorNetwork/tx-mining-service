@@ -35,6 +35,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--ban-addrs', help='File with list of banned addresses', type=str, default=None)
     parser.add_argument('--toi-apikey', help='apikey for toi service', type=str, default=None)
     parser.add_argument('--toi-url', help='toi service url', type=str, default=None)
+    parser.add_argument('--toi-fail-block', help='Block tx if toi fails', default=False, action='store_true')
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
     return parser
 
@@ -87,7 +88,7 @@ def execute(args: Namespace) -> None:
         if not (args.toi_url and args.toi_apikey):
             raise ValueError("Should pass both toi_url and toi_apikey")
         toiclient = TOIAsyncClient(args.toi_url, args.toi_apikey)
-        tx_filters.append(TOIFilter(toiclient))
+        tx_filters.append(TOIFilter(toiclient, block=args.toi_fail_block))
 
     api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
                   tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp,

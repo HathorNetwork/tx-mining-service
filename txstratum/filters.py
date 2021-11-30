@@ -92,9 +92,10 @@ class FileFilter(TXFilter):
 class TOIFilter(TXFilter):
     """Filter tx based on the toi service."""
 
-    def __init__(self, client: 'TOIAsyncClient') -> None:
+    def __init__(self, client: 'TOIAsyncClient', block: bool = False) -> None:
         """Init filter."""
         self.client = client
+        self.block = block
         self.log = logger.new()
 
     async def close(self) -> None:
@@ -121,6 +122,11 @@ class TOIFilter(TXFilter):
             return resp.blacklisted
         except TOIError as ex:
             # TOI Service error
-            self.log.error("toi_service_error", body=str(ex))
-            # Block request
-            return True
+            self.log.error("toi_service_error", data=data, body=str(ex))
+            if self.block:
+                # We are rejecting a tx based on a toi faillure
+                # TODO: alert
+                self.log.error("toi_error_reject", data=data, alert="[ALERT]")
+                return True
+            # allow request even if toi fails
+            return False
