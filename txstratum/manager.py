@@ -133,7 +133,7 @@ class TxMiningManager:
             assert isinstance(job, MinerTxJob)
             # Remove from queue.
             tx_job = job.tx_job
-            self.log.info(f"Solution submitted for TxJob {tx_job}")
+            self.log.info(f"Solution submitted for TxJob {tx_job} by miner {protocol.miner_id}")
             try:
                 self.tx_queue.remove(tx_job)
             except ValueError:
