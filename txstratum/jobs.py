@@ -10,12 +10,27 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from hathorlib import BaseTransaction, Block
 from hathorlib.scripts import create_output_script
+from structlog import get_logger
 
 import txstratum.time
 from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
     from asyncio import TimerHandle
+
+logger = get_logger()
+
+
+# XXX: This serves to artificially boost the weight until MIN_WEIGHT_EXTRA is reached, boosting the weight is useful
+#      for making it harder for cpuminers to flood the network in case something goes wrong, it also serves to force a
+#      higher weight in case the weight is too small to meaningfully increase the block score (in the future this issue
+#      will probably have been fixed, so it won't matter much). The particular values bellow assume a hashrate of at
+#      least .5GH/s is being used on the tx-mining-service, this is 5% of the mininmum hashrate a USB GekkoScience ASIC
+#      can do, and about what 2 GPUs on AWS can do. The boosting mechanism is to basically add WEIGHT_EXTRA_ADD capping
+#      it to MIN_WEIGHT_EXTRA (examples: weight=21.0 -> weight=25.0, weight=30.0 -> weight=34.0, weight=31.0 ->
+#      weight=34.0, weight=34.0 -> weight=34.0, weight=35.0 -> weight=35.0)
+MIN_WEIGHT_EXTRA = 34.0
+WEIGHT_EXTRA_ADD = 4.0
 
 
 class JobStatus(enum.Enum):
@@ -256,6 +271,13 @@ class MinerBlockJob(MinerJob):
     def __init__(self, data: bytes, height: int):
         """Init MinerBlockJob."""
         self._block: Block = Block.create_from_struct(data)
+        cur_weight = self._block.weight
+        extra_weight = self._block.weight + WEIGHT_EXTRA_ADD
+        new_weight = (cur_weight if cur_weight > MIN_WEIGHT_EXTRA else
+                      MIN_WEIGHT_EXTRA if extra_weight > MIN_WEIGHT_EXTRA else extra_weight)
+        if new_weight != self._block.weight:
+            self._block.weight = new_weight
+            logger.warn(f'Force weight={new_weight} to avoid insignificant score bump')
         self.height: int = height
 
         self.uuid: bytes = uuid.uuid4().bytes
