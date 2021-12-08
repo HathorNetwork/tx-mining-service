@@ -216,10 +216,12 @@ class StratumProtocol(JSONRPCProtocol):
         self.send_result(msgid, 'ok')
 
         if isinstance(job, MinerBlockJob):
-            assert self.started_current_block_at is not None
-            dt = job.submitted_at - self.started_current_block_at
-            self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight, dt))
-            self.started_current_block_at = None
+            if self.started_current_block_at is not None:
+                dt = job.submitted_at - self.started_current_block_at
+                self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight, dt))
+                self.started_current_block_at = None
+            else:
+                self.log.error('two submits for the same job?!', verify_pow=obj.verify_pow())
 
         # Too many jobs too fast, increase difficulty out of caution (more than 10 submits within the last 10s)
         if sum(1 for x in self._submitted_work if now - x.timestamp < 10) > 10:
