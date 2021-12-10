@@ -2,7 +2,7 @@ import asyncio
 import os
 from typing import TYPE_CHECKING, Dict, NamedTuple
 
-from prometheus_client import CollectorRegistry, Gauge, write_to_textfile  # type: ignore
+from prometheus_client import CollectorRegistry, Gauge, write_to_textfile, start_http_server  # type: ignore
 
 if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager
@@ -50,23 +50,15 @@ def collect_metrics(manager: 'TxMiningManager') -> MetricData:
     )
 
 
-class PrometheusExporter:
-    """Class that sends hathor metrics to a node exporter that will be read by Prometheus."""
+class BasePrometheusExporter:
+    """Base class for prometheus exporters."""
 
-    def __init__(self, manager: 'TxMiningManager', path: str, filename: str = 'tx-mining-service.prom'):
-        """Init PrometheusExporter.
+    def __init__(self, manager: 'TxMiningManager'):
+        """Init BasePrometheusExporter.
 
         :param manager: Manager where the metrics will be collected from
-        :param path: Path to save the prometheus file
-        :param filename: Name of the prometheus file (must end in .prom)
         """
         self.manager = manager
-
-        # Create full directory, if does not exist
-        os.makedirs(path, exist_ok=True)
-
-        # Full filepath with filename
-        self.filepath: str = os.path.join(path, filename)
 
         # Stores all Gauge objects for each metric (key is the metric name)
         self.metric_gauges: Dict[str, Gauge] = {}
@@ -87,19 +79,6 @@ class PrometheusExporter:
         for name, comment in METRIC_INFO.items():
             self.metric_gauges[name] = Gauge(name, comment, registry=self.registry)
 
-    def start(self) -> None:
-        """Start exporter."""
-        self.running = True
-        self._schedule_and_write_data()
-
-    def update_metrics(self) -> None:
-        """Update metric_gauges dict with new data from metrics."""
-        data = collect_metrics(self.manager)
-        for metric_name in METRIC_INFO.keys():
-            self.metric_gauges[metric_name].set(getattr(data, metric_name))
-
-        write_to_textfile(self.filepath, self.registry)
-
     def _schedule_and_write_data(self) -> None:
         """Update metrics and schedule to be called again."""
         if self.running:
@@ -109,6 +88,61 @@ class PrometheusExporter:
             loop = asyncio.get_event_loop()
             loop.call_later(self.call_interval, self._schedule_and_write_data)
 
+    def update_metrics(self) -> None:
+        """Update metric_gauges dict with new data from metrics."""
+        data = collect_metrics(self.manager)
+        for metric_name in METRIC_INFO.keys():
+            self.metric_gauges[metric_name].set(getattr(data, metric_name))
+
+    def start(self) -> None:
+        """Start exporter."""
+        self.running = True
+        self._schedule_and_write_data()
+
     def stop(self) -> None:
         """Stop exporter."""
         self.running = False
+
+
+class PrometheusExporter(BasePrometheusExporter):
+    """Class that sends hathor metrics to a node exporter that will be read by Prometheus."""
+
+    def __init__(self, manager: 'TxMiningManager', path: str, filename: str = 'tx-mining-service.prom'):
+        """Init PrometheusExporter.
+
+        :param manager: Manager where the metrics will be collected from
+        :param path: Path to save the prometheus file
+        :param filename: Name of the prometheus file (must end in .prom)
+        """
+        super().__init__(manager)
+
+        # Create full directory, if does not exist
+        os.makedirs(path, exist_ok=True)
+
+        # Full filepath with filename
+        self.filepath: str = os.path.join(path, filename)
+
+    def update_metrics(self) -> None:
+        super().update_metrics()
+
+        write_to_textfile(self.filepath, self.registry)
+
+
+class HttpPrometheusExporter(BasePrometheusExporter):
+    """Class that exposes metrics in a http endpoint"""
+
+    def __init__(self, manager: 'TxMiningManager', port: int):
+        """Init HttpPrometheusExporter.
+
+        :param manager: Manager where the metrics will be collected from
+        :param port: Port to expose the metrics
+        """
+        super().__init__(manager)
+
+        self.port = port
+
+    def start(self) -> None:
+        """Start exporter."""
+        super().start()
+
+        start_http_server(self.port, registry=self.registry)

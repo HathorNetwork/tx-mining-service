@@ -28,6 +28,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
     parser.add_argument('--fix-invalid-timestamp', action='store_true', help='Fix invalid timestamp to current time')
     parser.add_argument('--prometheus', help='Path to export metrics for Prometheus', type=str, default=None)
+    parser.add_argument('--prometheus-port', help='Enables exporting metrics in a http server in the specified port', type=int, default=9090)
     parser.add_argument('--testnet', action='store_true', help='Use testnet config parameters')
     parser.add_argument('--address', help='Mining address for blocks', type=str, default=None)
     parser.add_argument('--allow-non-standard-script', action='store_true', help='Accept mining non-standard tx')
@@ -80,6 +81,12 @@ def execute(args: Namespace) -> None:
         from txstratum.prometheus import PrometheusExporter
         metrics = PrometheusExporter(manager, args.prometheus)
         metrics.start()
+
+    if args.prometheus_port:
+        from txstratum.prometheus import HttpPrometheusExporter
+        http_metrics = HttpPrometheusExporter(manager, args.prometheus_port)
+        http_metrics.start()
+        logger.info('Prometheus metrics server running at 0.0.0.0:{}...'.format(args.prometheus_port))
 
     if args.ban_addrs or args.ban_tx_ids:
         tx_filters.append(FileFilter.load_from_files(args.ban_tx_ids, args.ban_addrs))
