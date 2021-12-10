@@ -2,7 +2,7 @@ import asyncio
 import os
 from typing import TYPE_CHECKING, Dict, NamedTuple
 
-from prometheus_client import CollectorRegistry, Gauge, write_to_textfile, start_http_server  # type: ignore
+from prometheus_client import CollectorRegistry, Gauge, start_http_server, write_to_textfile  # type: ignore
 
 if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager
@@ -123,13 +123,14 @@ class PrometheusExporter(BasePrometheusExporter):
         self.filepath: str = os.path.join(path, filename)
 
     def update_metrics(self) -> None:
+        """Update metric_gauges dict with new data from metrics."""
         super().update_metrics()
 
         write_to_textfile(self.filepath, self.registry)
 
 
 class HttpPrometheusExporter(BasePrometheusExporter):
-    """Class that exposes metrics in a http endpoint"""
+    """Class that exposes metrics in a http endpoint."""
 
     def __init__(self, manager: 'TxMiningManager', port: int):
         """Init HttpPrometheusExporter.

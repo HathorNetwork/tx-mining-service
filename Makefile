@@ -56,6 +56,8 @@ check: flake8 isort-check mypy
 
 # formatting:
 
+# TODO yapf formatting seems to be conflicting with flake8
+#      maybe we should tweak its configuration or replace it
 .PHONY: fmt
 fmt: yapf isort
 
