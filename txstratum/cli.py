@@ -23,6 +23,7 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--stratum-port', help='Port of Stratum server', type=int, default=8000)
     parser.add_argument('--api-port', help='Port of TxMining API server', type=int, default=8080)
     parser.add_argument('--log-config', help='Config file for logging', default='log.conf')
+    parser.add_argument('--json-logs', help='Enabled logging in json', default=False, action='store_true')
     parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=float, default=None)
     parser.add_argument('--max-timestamp-delta', help='Maximum allowed tx timestamp delta', type=int, default=None)
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
@@ -52,7 +53,22 @@ def execute(args: Namespace) -> None:
 
     # Configure log.
     start_logging()
-    if os.path.exists(args.log_config):
+    if args.json_logs:
+        logging.basicConfig(level=logging.INFO, format='%(message)s')
+        from structlog.stdlib import LoggerFactory
+        structlog.configure(
+            logger_factory=LoggerFactory(),
+            processors=[
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.processors.add_log_level,
+                structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+                structlog.processors.format_exc_info,
+                structlog.processors.JSONRenderer()
+            ])
+        logger.info('tx-mining-service', backend=args.backend)
+        logger.info('Logging with json format.', log_config=args.log_config)
+    elif os.path.exists(args.log_config):
         logging.config.fileConfig(args.log_config)
         from structlog.stdlib import LoggerFactory
         structlog.configure(logger_factory=LoggerFactory())
