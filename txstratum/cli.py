@@ -16,13 +16,16 @@ from structlog import get_logger
 logger = get_logger()
 
 
+DEFAULT_LOGGING_CONFIG_FILE = "log.conf"
+
+
 def create_parser() -> ArgumentParser:
     """Create a parser for the cmdline arguments."""
     import configargparse  # type: ignore
     parser: ArgumentParser = configargparse.ArgumentParser(auto_env_var_prefix='hathor_')
     parser.add_argument('--stratum-port', help='Port of Stratum server', type=int, default=8000)
     parser.add_argument('--api-port', help='Port of TxMining API server', type=int, default=8080)
-    parser.add_argument('--log-config', help='Config file for logging', default='log.conf')
+    parser.add_argument('--log-config', help='Config file for logging', default=None)
     parser.add_argument('--json-logs', help='Enabled logging in json', default=False, action='store_true')
     parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=float, default=None)
     parser.add_argument('--max-timestamp-delta', help='Maximum allowed tx timestamp delta', type=int, default=None)
@@ -52,8 +55,14 @@ def execute(args: Namespace) -> None:
     from txstratum.utils import start_logging
 
     # Configure log.
+    log_config_file = args.log_config or DEFAULT_LOGGING_CONFIG_FILE
+
     start_logging()
     if args.json_logs:
+        if args.log_config:
+            logger.error('--json-logs and --log-config are mutually exclusive')
+            exit(1)
+
         logging.basicConfig(level=logging.INFO, format='%(message)s')
         from structlog.stdlib import LoggerFactory
         structlog.configure(
@@ -67,16 +76,16 @@ def execute(args: Namespace) -> None:
                 structlog.processors.JSONRenderer()
             ])
         logger.info('tx-mining-service', backend=args.backend)
-        logger.info('Logging with json format.', log_config=args.log_config)
-    elif os.path.exists(args.log_config):
-        logging.config.fileConfig(args.log_config)
+        logger.info('Logging with json format...')
+    elif os.path.exists(log_config_file):
+        logging.config.fileConfig(log_config_file)
         from structlog.stdlib import LoggerFactory
         structlog.configure(logger_factory=LoggerFactory())
         logger.info('tx-mining-service', backend=args.backend)
-        logger.info('Configuring log...', log_config=args.log_config)
+        logger.info('Configuring log...', log_config=log_config_file)
     else:
         logger.info('tx-mining-service', backend=args.backend)
-        logger.info('Log config file not found; using default configuration.', log_config=args.log_config)
+        logger.info('Log config file not found; using default configuration.', log_config=log_config_file)
 
     # Set up all parts.
     loop = asyncio.get_event_loop()
