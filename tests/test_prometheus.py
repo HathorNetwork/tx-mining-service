@@ -8,12 +8,13 @@ import os
 import shutil
 import tempfile
 import unittest
+from tests.utils import async_test
 
 from txstratum.manager import TxMiningManager
 from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
 
 
-class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
+class ManagerTestCase(unittest.TestCase):
     def setUp(self):
         self.manager = TxMiningManager(backend=None, address=None)
         self.tmpdir = tempfile.mkdtemp()
@@ -27,6 +28,7 @@ class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
         metric_keys = set(MetricData._fields)
         self.assertEqual(description_keys, metric_keys)
 
+    @async_test
     async def test_update_metrics(self):
         prometheus = PrometheusExporter(self.manager, self.tmpdir)
         await prometheus.update_metrics()
