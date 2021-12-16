@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Dict, NamedTuple
 
 from prometheus_client import CollectorRegistry, Gauge, start_http_server, write_to_textfile  # type: ignore
 
+from txstratum.utils import Periodic
+
 if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager
 
@@ -69,8 +71,8 @@ class BasePrometheusExporter:
         # Interval in which the write data method will be called (in seconds)
         self.call_interval: int = 5
 
-        # If exporter is running
-        self.running: bool = False
+        # Periodic task to update metrics
+        self.update_metrics_task: Periodic = Periodic(self.update_metrics, self.call_interval)
 
     def _initial_setup(self) -> None:
         """Start a collector registry to send data to node exporter."""
@@ -79,16 +81,7 @@ class BasePrometheusExporter:
         for name, comment in METRIC_INFO.items():
             self.metric_gauges[name] = Gauge(name, comment, registry=self.registry)
 
-    def _schedule_and_write_data(self) -> None:
-        """Update metrics and schedule to be called again."""
-        if self.running:
-            self.update_metrics()
-
-            # Schedule next call
-            loop = asyncio.get_event_loop()
-            loop.call_later(self.call_interval, self._schedule_and_write_data)
-
-    def update_metrics(self) -> None:
+    async def update_metrics(self) -> None:
         """Update metric_gauges dict with new data from metrics."""
         data = collect_metrics(self.manager)
         for metric_name in METRIC_INFO.keys():
@@ -96,12 +89,11 @@ class BasePrometheusExporter:
 
     def start(self) -> None:
         """Start exporter."""
-        self.running = True
-        self._schedule_and_write_data()
+        asyncio.ensure_future(self.update_metrics_task.start())
 
     def stop(self) -> None:
         """Stop exporter."""
-        self.running = False
+        asyncio.ensure_future(self.update_metrics_task.stop())
 
 
 class PrometheusExporter(BasePrometheusExporter):
@@ -122,9 +114,9 @@ class PrometheusExporter(BasePrometheusExporter):
         # Full filepath with filename
         self.filepath: str = os.path.join(path, filename)
 
-    def update_metrics(self) -> None:
+    async def update_metrics(self) -> None:
         """Update metric_gauges dict with new data from metrics."""
-        super().update_metrics()
+        await super().update_metrics()
 
         write_to_textfile(self.filepath, self.registry)
 
