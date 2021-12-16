@@ -56,14 +56,13 @@ check: flake8 isort-check mypy
 
 # formatting:
 
-# TODO yapf formatting seems to be conflicting with flake8
-#      maybe we should tweak its configuration or replace it
 .PHONY: fmt
 fmt: yapf isort
 
 .PHONY: yapf
 yapf: $(py_sources) $(py_tests)
-	yapf -rip $^ -e \*_pb2.py,\*_pb2_grpc.py
+	echo "Skipping yapf because it's conflicting with flake8"
+#	yapf -rip $^ -e \*_pb2.py,\*_pb2_grpc.py
 
 .PHONY: isort
 isort: $(py_sources) $(py_tests)
