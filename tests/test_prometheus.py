@@ -13,7 +13,7 @@ from txstratum.manager import TxMiningManager
 from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
 
 
-class ManagerTestCase(unittest.TestCase):
+class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.manager = TxMiningManager(backend=None, address=None)
         self.tmpdir = tempfile.mkdtemp()
@@ -27,9 +27,9 @@ class ManagerTestCase(unittest.TestCase):
         metric_keys = set(MetricData._fields)
         self.assertEqual(description_keys, metric_keys)
 
-    def test_update_metrics(self):
+    async def test_update_metrics(self):
         prometheus = PrometheusExporter(self.manager, self.tmpdir)
-        prometheus.update_metrics()
+        await prometheus.update_metrics()
         self.assertTrue(os.path.exists(prometheus.filepath))
 
         # Check if all metrics are in the file.
