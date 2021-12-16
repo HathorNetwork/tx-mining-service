@@ -118,7 +118,7 @@ def execute(args: Namespace) -> None:
                 max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
                 only_standard_script=api_app.only_standard_script, tx_filters=tx_filters)
 
-    web_runner = web.AppRunner(api_app.app)
+    web_runner = web.AppRunner(api_app.app, logger=logger)
     loop.run_until_complete(web_runner.setup())
     site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)
     loop.run_until_complete(site.start())
