@@ -8,8 +8,8 @@ import os
 import shutil
 import tempfile
 import unittest
-from tests.utils import async_test
 
+from tests.utils import async_test
 from txstratum.manager import TxMiningManager
 from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
 
