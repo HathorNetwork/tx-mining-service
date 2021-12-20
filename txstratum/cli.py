@@ -16,13 +16,15 @@ from structlog import get_logger
 logger = get_logger()
 
 
+DEFAULT_LOGGING_CONFIG_FILE = "log.conf"
+
+
 def create_parser() -> ArgumentParser:
     """Create a parser for the cmdline arguments."""
     import configargparse  # type: ignore
     parser: ArgumentParser = configargparse.ArgumentParser(auto_env_var_prefix='hathor_')
     parser.add_argument('--stratum-port', help='Port of Stratum server', type=int, default=8000)
     parser.add_argument('--api-port', help='Port of TxMining API server', type=int, default=8080)
-    parser.add_argument('--log-config', help='Config file for logging', default='log.conf')
     parser.add_argument('--max-tx-weight', help='Maximum allowed tx weight to be mined', type=float, default=None)
     parser.add_argument('--max-timestamp-delta', help='Maximum allowed tx timestamp delta', type=int, default=None)
     parser.add_argument('--tx-timeout', help='Tx mining timeout (seconds)', type=int, default=None)
@@ -37,6 +39,10 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--toi-url', help='toi service url', type=str, default=None)
     parser.add_argument('--toi-fail-block', help='Block tx if toi fails', default=False, action='store_true')
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
+
+    logs = parser.add_mutually_exclusive_group()
+    logs.add_argument('--log-config', help='Config file for logging', default=DEFAULT_LOGGING_CONFIG_FILE)
+    logs.add_argument('--json-logs', help='Enabled logging in json', default=False, action='store_true')
     return parser
 
 
@@ -52,7 +58,22 @@ def execute(args: Namespace) -> None:
 
     # Configure log.
     start_logging()
-    if os.path.exists(args.log_config):
+    if args.json_logs:
+        logging.basicConfig(level=logging.INFO, format='%(message)s')
+        from structlog.stdlib import LoggerFactory
+        structlog.configure(
+            logger_factory=LoggerFactory(),
+            processors=[
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.processors.add_log_level,
+                structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+                structlog.processors.format_exc_info,
+                structlog.processors.JSONRenderer()
+            ])
+        logger.info('tx-mining-service', backend=args.backend)
+        logger.info('Logging with json format...')
+    elif os.path.exists(args.log_config):
         logging.config.fileConfig(args.log_config)
         from structlog.stdlib import LoggerFactory
         structlog.configure(logger_factory=LoggerFactory())
@@ -97,7 +118,7 @@ def execute(args: Namespace) -> None:
                 max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
                 only_standard_script=api_app.only_standard_script, tx_filters=tx_filters)
 
-    web_runner = web.AppRunner(api_app.app)
+    web_runner = web.AppRunner(api_app.app, logger=logger)
     loop.run_until_complete(web_runner.setup())
     site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)
     loop.run_until_complete(site.start())
