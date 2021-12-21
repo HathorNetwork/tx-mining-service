@@ -4,7 +4,7 @@ servers:
 info:
   title: tx-mining-service API
   description: This service is used to resolving transactions before propagating them into the network
-  version: 0.1.0
+  version: 0.2.0
 paths:
   /health-check:
     get:
