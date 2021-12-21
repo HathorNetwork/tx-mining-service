@@ -61,7 +61,8 @@ fmt: yapf isort
 
 .PHONY: yapf
 yapf: $(py_sources) $(py_tests)
-	yapf -rip $^ -e \*_pb2.py,\*_pb2_grpc.py
+	echo "Skipping yapf because it's conflicting with flake8"
+#	yapf -rip $^ -e \*_pb2.py,\*_pb2_grpc.py
 
 .PHONY: isort
 isort: $(py_sources) $(py_tests)
