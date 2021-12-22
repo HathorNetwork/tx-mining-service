@@ -58,7 +58,7 @@ jobs:
             tag = 'dev-${{ github.sha }}-' + timestamp
 
         tags.add(base_tag + ':' + tag)
-        print("::set-output name=tags::" + tags)
+        print("::set-output name=tags::" + ",".join(tags))
     - name: Set up QEMU
       uses: docker/setup-qemu-action@27d0a4f181a40b142cce983c5393082c365d1480
     - name: Set up Docker Buildx
