@@ -4,8 +4,8 @@ on:
     tags:
     - v*
     # TODO: Remove
-    # branches:
-    # - ci/push-to-ecr
+    branches:
+    - ci/push-to-ecr
 
 jobs:
   # push-to-dockerhub:
