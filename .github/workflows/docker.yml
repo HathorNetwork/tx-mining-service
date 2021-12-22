@@ -42,7 +42,7 @@ jobs:
       run: |
         import datetime
 
-        timestamp = int(datetime.datetime.now().timestamp())
+        timestamp = str(int(datetime.datetime.now().timestamp()))
         base_tag = '${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/tx-mining-service'
 
         tags = {}
