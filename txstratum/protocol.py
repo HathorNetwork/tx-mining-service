@@ -8,7 +8,9 @@ from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
 
 from hathorlib import sum_weights
+from hathorlib.conf import HathorSettings
 from hathorlib.exceptions import InvalidAddress
+from hathorlib.scripts import binary_to_int
 from hathorlib.utils import decode_address
 from structlog import get_logger
 
@@ -21,6 +23,8 @@ if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager  # noqa: F401
 
 logger = get_logger()
+settings = HathorSettings()
+VALID_FIRST_BYTE = {binary_to_int(settings.P2PKH_VERSION_BYTE), binary_to_int(settings.MULTISIG_VERSION_BYTE)}
 
 
 class SubmittedWork(NamedTuple):
@@ -151,7 +155,13 @@ class StratumProtocol(JSONRPCProtocol):
         if params and 'address' in params and params['address'] is not None:
             try:
                 address = params['address']
-                self.miner_address = decode_address(address)
+                address_bytes = decode_address(address)
+                if address_bytes[0] not in VALID_FIRST_BYTE:
+                    self.log.warn('Forcing different network address')
+                    address_bytes = bytearray(address_bytes)
+                    address_bytes[0] = binary_to_int(settings.P2PKH_VERSION_BYTE)
+                    address_bytes = bytes(address_bytes)
+                self.miner_address = address_bytes
                 self.miner_address_str = address
             except InvalidAddress:
                 self.log.debug('Miner with invalid address', address=address)
