@@ -35,7 +35,7 @@ jobs:
             tags.add(base_dockerhub_tag + version)
             tags.add(base_dockerhub_tag + 'latest')
         elif ref == 'refs/heads/master':
-            tags.add(base_ecr_tag + 'staging-${{ github.sha }}-' + timestamp
+            tags.add(base_ecr_tag + 'staging-${{ github.sha }}-' + timestamp)
         else:
             tags.add(base_ecr_tag + 'dev-${{ github.sha }}-' + timestamp)
 
