@@ -3,9 +3,7 @@ on:
   push:
     tags:
     - v*
-    # TODO: Remove
     branches:
-    - ci/push-to-ecr
     - master
 
 jobs:
