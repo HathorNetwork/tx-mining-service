@@ -44,7 +44,7 @@ class StratumProtocol(JSONRPCProtocol):
     ESTIMATOR_LOOP_INTERVAL = 15  # in seconds, "frequency" that the function that updates the estimator will be called
     ESTIMATOR_WINDOW_INTERVAL = 60 * 15  # in seconds, size of the window to use for estimating miner's hashrate
     TARGET_JOB_TIME = 15  # in seconds, adjust difficulty so jobs take this long
-    JOB_UPDATE_INTERVAL = 2  # in seconds, to update the timestamp of the job
+    JOB_UPDATE_INTERVAL = 10  # in seconds, to update the timestamp of the job
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
     MAX_WEIGHT = 60.0  # maximum "difficulty" to assign to jobs

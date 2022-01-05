@@ -35,7 +35,7 @@ class TxMiningManager:
     When a new tx arrives, manager calls `miner.update_job()`.
     """
 
-    BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0  # seconds
+    BLOCK_TEMPLATE_UPDATE_INTERVAL = 5.0  # seconds
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
     def __init__(self, backend: 'HathorClient', address: Optional[str] = None):
