@@ -133,17 +133,23 @@ class TxMiningManager:
             assert isinstance(job, MinerTxJob)
             # Remove from queue.
             tx_job = job.tx_job
-            self.log.info(f"Solution submitted for TxJob {tx_job} by miner {protocol.miner_id}")
+
+            if tx_job.status == JobStatus.DONE:
+                # This probably means two miners submitted a solution to the same job
+                self.log.debug(
+                    "Received solution for a job that was already solved.",
+                    job_id=tx_job.uuid.hex(),
+                )
+                return
+
             try:
                 self.tx_queue.remove(tx_job)
             except ValueError:
-                # This means another miner submitted a solution shortly before
-                #  and so the txJob has been already removed from the queue
-                self.log.warning((
-                    "Tried removing tx_job from the queue but the queue does not contain this tx_job. "
-                    "Probably because 2 miners found a solution for it at the same time."
-                ))
-                return
+                self.log.warning(
+                    "Tried removing a job that was not in the queue.",
+                    job_id=tx_job.uuid.hex(),
+                )
+
             # Schedule to clean it up.
             self.schedule_job_clean_up(tx_job)
             # Mark as solved, stop mining it, and propagate if requested.
