@@ -15,3 +15,5 @@ coverage_html_report/
 build/
 dist/
 *.egg-info
+
+htmlcov/

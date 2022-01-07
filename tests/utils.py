@@ -27,3 +27,14 @@ class Clock:
 
     def disable(self) -> None:
         txstratum.time.set_time_function(None)
+
+
+# XXX: We could use unittest's IsolatedAsyncioTestCase instead, but it's available only in Python 3.8+.
+def async_test(coro):
+    def wrapper(*args, **kwargs):
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro(*args, **kwargs))
+        finally:
+            loop.close()
+    return wrapper

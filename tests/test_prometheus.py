@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import unittest
 
+from tests.utils import async_test
 from txstratum.manager import TxMiningManager
 from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
 
@@ -27,9 +28,10 @@ class ManagerTestCase(unittest.TestCase):
         metric_keys = set(MetricData._fields)
         self.assertEqual(description_keys, metric_keys)
 
-    def test_update_metrics(self):
+    @async_test
+    async def test_update_metrics(self):
         prometheus = PrometheusExporter(self.manager, self.tmpdir)
-        prometheus.update_metrics()
+        await prometheus.update_metrics()
         self.assertTrue(os.path.exists(prometheus.filepath))
 
         # Check if all metrics are in the file.
