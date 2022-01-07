@@ -66,7 +66,6 @@ class StratumProtocol(JSONRPCProtocol):
 
         self.jobs: MaxSizeOrderedDict[bytes, 'MinerJob'] = MaxSizeOrderedDict(max=self.MAX_JOBS)
         self.current_job: Optional['MinerJob'] = None
-        self.started_current_block_at: Optional[float] = None
         self.current_weight: float = self.INITIAL_WEIGHT
         self.hashrate_ghs: float = 0.0
 
@@ -206,6 +205,7 @@ class StratumProtocol(JSONRPCProtocol):
             return self.send_error(msgid, self.JOB_NOT_FOUND)
 
         if job.submitted_at is not None:
+            self.log.debug('Job already submitted', job_id=job_id)
             return self.send_error(msgid, self.STALE_JOB, {
                 'current_job': self.current_job and self.current_job.uuid.hex(),
                 'job_id': job_id.hex()
@@ -226,11 +226,8 @@ class StratumProtocol(JSONRPCProtocol):
         self.send_result(msgid, 'ok')
 
         if isinstance(job, MinerBlockJob):
-            assert self.started_current_block_at is not None
-            dt = job.submitted_at - self.started_current_block_at
+            dt = job.submitted_at - job.started_at
             self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight, dt))
-            self.started_current_block_at = None
-
         # Too many jobs too fast, increase difficulty out of caution (more than 10 submits within the last 10s)
         if sum(1 for x in self._submitted_work if now - x.timestamp < 10) > 10:
             # Doubles the difficulty
@@ -363,11 +360,8 @@ class StratumProtocol(JSONRPCProtocol):
         if self._update_job_timestamp:
             job.update_timestamp()
 
-        # Update when the miner started mining a block.
-        if not isinstance(job, MinerBlockJob):
-            self.started_current_block_at = None
-        elif self.started_current_block_at is None:
-            self.started_current_block_at = txstratum.time.time()
+        # Update when the job started mining
+        job.started_at = txstratum.time.time()
 
         # Add job to the job list and set it as current job
         self.current_job = job
