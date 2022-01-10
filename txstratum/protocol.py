@@ -63,6 +63,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.miner_id: str = str(uuid.uuid4())
         self.miner_address: Optional[bytes] = None
         self.miner_address_str: Optional[str] = None
+        self.miner_version: Optional[str] = None
 
         self.jobs: MaxSizeOrderedDict[bytes, 'MinerJob'] = MaxSizeOrderedDict(max=self.MAX_JOBS)
         self.current_job: Optional['MinerJob'] = None
@@ -104,6 +105,14 @@ class StratumProtocol(JSONRPCProtocol):
 
             'mining.extranonce.subscribe': self.method_extranonce_subscribe,
         }
+
+    def handle_result(self, result: Any, msgid: JSONRPCId) -> None:
+        """Handle a result from JSONRPC."""
+        if msgid == 'client.get_version':
+            self.log.info('Miner version: {}'.format(result), miner_id=self.miner_id)
+            self.miner_version = result
+        else:
+            self.log.error('Cant handle result: {}'.format(result), miner_id=self.miner_id)
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Set things up after a new connection is made.
@@ -334,6 +343,8 @@ class StratumProtocol(JSONRPCProtocol):
 
     def start_if_ready(self) -> None:
         """Start mining if it is ready."""
+        self.send_request('client.get_version', None, 'client.get_version')
+
         if not self.is_ready():
             return
         if self.current_job is not None:
