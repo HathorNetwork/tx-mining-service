@@ -116,6 +116,16 @@ class TxMiningManager:
             clean = True
         protocol.update_job(job, clean=clean)
 
+    async def push_tx_or_block(self, job: MinerJob) -> None:
+        obj = job.get_object()
+        self.log.info('pushing block...', block_hash=obj.hash.hex())
+        try:
+            ret = await self.backend.push_tx_or_block(job.get_data())
+            self.log.info('push_tx_or_block success', block_hash=obj.hash.hex(), success=ret)
+        except Exception as e:
+            # XXX What should we do?!
+            self.log.exception('push_tx_or_block failed', block_hash=obj.hash.hex())
+
     def submit_solution(self, protocol: StratumProtocol, job: MinerJob, nonce: bytes) -> None:
         """Submit a new solution for a job. It is called by StratumProtocol."""
         if job.is_block:
@@ -123,10 +133,11 @@ class TxMiningManager:
             if job.height <= self.latest_submitted_block_height:
                 return
             self.latest_submitted_block_height = job.height
-            asyncio.ensure_future(self.backend.push_tx_or_block(job.get_data()))
+            asyncio.ensure_future(self.push_tx_or_block(job))
             # XXX Should we stop all other miners from mining?
             asyncio.ensure_future(self.update_block_template())
-            self.log.info('Block found', job=job.uuid.hex())
+            blk = job.get_object()
+            self.log.info('Block found', job=job.uuid.hex(), block_hash=blk.hash.hex())
             self.blocks_found += 1
 
         else:
