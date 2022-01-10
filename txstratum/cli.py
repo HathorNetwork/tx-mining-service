@@ -39,7 +39,8 @@ def create_parser() -> ArgumentParser:
     parser.add_argument('--toi-apikey', help='apikey for toi service', type=str, default=None)
     parser.add_argument('--toi-url', help='toi service url', type=str, default=None)
     parser.add_argument('--toi-fail-block', help='Block tx if toi fails', default=False, action='store_true')
-    parser.add_argument('--block-template-update-interval', help='Block template update interval', type=int, default=None)
+    parser.add_argument(
+        '--block-template-update-interval', help='Block template update interval', type=int, default=None)
     parser.add_argument('backend', help='Endpoint of the Hathor API (without version)', type=str)
 
     logs = parser.add_mutually_exclusive_group()
