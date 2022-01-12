@@ -7,9 +7,9 @@ on:
     tags:
     - v*
   pull_request:
-    branches:
-    - dev
-    - master
+    types:
+    - synchronize
+    - ready_for_review
 jobs:
   test:
     name: python-${{ matrix.python }} (${{ matrix.os }})
