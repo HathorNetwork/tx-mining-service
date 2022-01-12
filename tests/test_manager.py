@@ -548,6 +548,7 @@ class ManagerTestCase(unittest.TestCase):
         self.assertEqual(0, conn.current_job.height)
 
     def test_two_miners_same_tx_submission(self):
+        # Motivated by the exceptions described in https://github.com/HathorNetwork/tx-mining-service/pull/38
         conn = self._get_ready_miner()
         self.assertIsNotNone(conn.current_job)
         self.assertTrue(conn.current_job.is_block)
