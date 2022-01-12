@@ -54,18 +54,24 @@ class RunService:
     manager: TxMiningManager
     loop: AbstractEventLoop
 
-    def sigterm_handler(self, sig: int, frame: Any) -> None:
-        """Called when SIGTERM signal is received."""
-        logger.info('SIGTERM received.')
+    async def graceful_shutdown(self) -> None:
+        """Gracefully shutdown the service."""
+        logger.info('Gracefully shutting down...')
 
         while len(self.manager.tx_queue) > 0:
             logger.info('Waiting for txs to be mined...', txs_left=len(self.manager.tx_queue))
-            self.loop.run_until_complete(asyncio.sleep(5))
+            await asyncio.sleep(2)
 
         logger.info('Asking all miners to reconnect...')
         self.manager.ask_miners_to_reconnect()
 
         self.loop.stop()
+
+    def sigterm_handler(self) -> None:
+        """Called when SIGTERM signal is received."""
+        logger.info('SIGTERM received.')
+
+        self.loop.create_task(self.graceful_shutdown())
 
     def register_signal_handlers(self) -> None:
         """Register signal handlers."""
@@ -75,7 +81,7 @@ class RunService:
 
         sigterm = getattr(signal, 'SIGTERM', None)
         if sigterm is not None:
-            signal.signal(sigterm, self.sigterm_handler)
+            self.loop.add_signal_handler(sigterm, self.sigterm_handler)
 
     def configure_logging(self, args: Namespace):
         """Configure logging."""
