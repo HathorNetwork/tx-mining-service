@@ -547,6 +547,78 @@ class ManagerTestCase(unittest.TestCase):
         self.assertTrue(conn.current_job.is_block)
         self.assertEqual(0, conn.current_job.height)
 
+    def test_two_miners_same_tx_submission(self):
+        conn = self._get_ready_miner()
+        self.assertIsNotNone(conn.current_job)
+        self.assertTrue(conn.current_job.is_block)
+        self.assertEqual(0, conn.current_job.height)
+
+        conn2 = self._get_ready_miner()
+        self.assertIsNotNone(conn2.current_job)
+        self.assertTrue(conn2.current_job.is_block)
+        self.assertEqual(0, conn2.current_job.height)
+
+        job1 = TxJob(TX1_DATA)
+        job2 = TxJob(TX2_DATA)
+        ret1 = self.manager.add_job(job1)
+        ret2 = self.manager.add_job(job2)
+        self.assertFalse(conn.current_job.is_block)
+        self.assertEqual(conn.current_job.tx_job, job1)
+        self.assertTrue(ret1)
+        self.assertTrue(ret2)
+
+        old_current_job = conn2.current_job
+
+        # First submission: success
+        params = {
+            'job_id': conn.current_job.uuid.hex(),
+            'nonce': TX1_NONCE,
+        }
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, 'ok')
+
+        self.assertFalse(conn2.current_job.is_block)
+
+        # This simulates a submission on the old job, which is the same the other miner
+        # submitted. This is something we observed happening in the wild.
+        conn2.current_job = old_current_job
+        self.assertEqual(conn2.current_job.tx_job, job1)
+        params = {
+            'job_id': conn2.current_job.uuid.hex(),
+            'nonce': TX1_NONCE,
+        }
+        conn2.send_error = MagicMock(return_value=None)
+        conn2.send_result = MagicMock(return_value=None)
+        conn2.method_submit(params=params, msgid=None)
+        conn2.send_error.assert_not_called()
+        conn2.send_result.assert_called_once_with(None, 'ok')
+
+        # Run loop and check that the miner gets the next tx
+        self._run_all_pending_events()
+        self.assertFalse(conn.current_job.is_block)
+        self.assertEqual(conn.current_job.tx_job, job2)
+
+        # Second submission: success
+        params = {
+            'job_id': conn.current_job.uuid.hex(),
+            'nonce': TX2_NONCE,
+        }
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, 'ok')
+
+        # Run loop and check that the miners get a block
+        self._run_all_pending_events()
+        self.assertTrue(conn.current_job.is_block)
+        self.assertEqual(0, conn.current_job.height)
+        self.assertTrue(conn2.current_job.is_block)
+        self.assertEqual(0, conn2.current_job.height)
+
     def test_mining_tx_connection_lost(self):
         conn1 = self._get_ready_miner('HVZjvL1FJ23kH3buGNuttVRsRKq66WHUVZ')
         self.assertIsNotNone(conn1.current_job)
