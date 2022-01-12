@@ -34,33 +34,41 @@ We also have a public Docker image if you don't want to build it yourself:
 ## How it works
 
 The main components in the code are:
+- cli.py: it's the entrypoint of the service. It parses the command line arguments and starts the other modules.
 - api.py: the API server
-- protocol.py: handles communication with a specific miner through stratum protocol
-- manager.py: manages the job queue and assigns jobs to miners
+- protocol.py: Communicates with its miner through the Stratum protocol, to send jobs and receive submissions. Adjusts the jobs difficulty. Calculates the miner hashrate.
+- manager.py: Manages the job queue. Updates the block template. Assigns jobs to miners. Controls job timeouts. Adds parents to transactions.
 
-When the server starts, those are the first things to happen:
--  
-
-There are some important events that happen in the system:
+Those are the most important events that happen in the system:
 - A new miner connects to the stratum server
 - A new job is submitted to the API server
 - A miner submits a job solution to the stratum server
 - A new block template is found
 
-We will talk more about them in the next sections.
+We will talk more about each event in the next sections.
 
 ### A new miner connects
 When a new miner connects, a new instance of the protocol module is created for it and registered in the manager.
 
 It starts 2 periodic tasks:
 
-Estimator Task: It will adjust the difficulty of the next block (or tx?) to be mined. It will do so by summing the weight of all jobs submitted in the last 15 minutes (by default), and use this to set the next difficulty, increasing or decreasing it if necessary. (TODO: is this difficulty is used both by block mining and by tx mining?)
+- Estimator Task: It will adjust the difficulty of the next job to be mined. It will do so with the goal of keeping the time to solve a job equal to the TARGET_JOB_TIME.
+
+This difficulty adjustment is done to allow us to calculate the hashrate of the miner, by checking how many jobs it submitted in a given period and their weight.
+
+It should be noted that because of this mechanism, the difficulty we assign to jobs can be lower than the difficulty of the block template, in the case of block jobs. Especially in the mainnet, where the difficulty of the network is too high.
+
+This will make the miners sometimes send submissions that are valid for this lower difficulty, but not for the real difficulty we need to solve the block.
+
+That's why we need to verify those submissions and reject them if they are not valid. In this case, we will just send a new job to the miner.
+
+For transaction jobs, this will hardly ever happen, since their difficulty is usually low.
 
 This task runs every 15 seconds.
 
-Every time the difficulty is changed, the miner job is updated. (TODO Why?)
+- Job Update Task: It will update the job this miner is working on. The manager will send a MinerTxJob, if there is one, and force the miner to work immediately on it. Otherwise, it will just send a MinerBlockJob, and do not force the miner to work immediately on it.
 
-- Job Update Task: It will update the job this miner is working on. The manager will send a MinerTxJob, if there is one, and force the miner to work immediately on it. Otherwise, it will just send a MinerBlockJob.
+This task is important to make sure we prioritize tx jobs over block jobs.
 
 This task runs every 2 seconds.
 
@@ -74,7 +82,7 @@ If they are mining a tx, it will do nothing.
 
 When a new job arrives at the API, it will be added to the manager's job queue.
 
-A timeout is scheduled for it. If the timeout is reached, the job will be removed from the queue and immediately stopped being processed in the miners.
+A timeout is scheduled for it. If the timeout is reached, the job will be removed from the queue and immediately stopped being worked in the miners.
 
 If the queue was empty, the manager will call an update on all miners jobs, to make them work on the new tx job.
 
