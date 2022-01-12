@@ -3,21 +3,23 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import asyncio
+from asyncio.events import AbstractEventLoop
 import logging
 import logging.config
 import os
 from argparse import ArgumentParser, Namespace
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import structlog
 from aiohttp import web
 from structlog import get_logger
 
+from txstratum.manager import TxMiningManager
+
 logger = get_logger()
 
 
 DEFAULT_LOGGING_CONFIG_FILE = "log.conf"
-
 
 def create_parser() -> ArgumentParser:
     """Create a parser for the cmdline arguments."""
@@ -48,109 +50,145 @@ def create_parser() -> ArgumentParser:
     logs.add_argument('--json-logs', help='Enabled logging in json', default=False, action='store_true')
     return parser
 
+class RunService:
+    manager: TxMiningManager
+    loop: AbstractEventLoop
 
-def execute(args: Namespace) -> None:
-    """Run the service according to the args."""
-    from hathorlib.client import HathorClient
+    def sigterm_handler(self, sig: int, frame: Any) -> None:
+        """Called when SIGTERM signal is received."""
+        logger.info('SIGTERM received.')
 
-    from txstratum.api import App
-    from txstratum.filters import FileFilter, TOIFilter, TXFilter
-    from txstratum.manager import TxMiningManager
-    from txstratum.toi_client import TOIAsyncClient
-    from txstratum.utils import start_logging
+        while len(self.manager.tx_queue) > 0:
+            logger.info('Waiting for txs to be mined...', txs_left=len(self.manager.tx_queue))
+            self.loop.run_until_complete(asyncio.sleep(5))
 
-    # Configure log.
-    start_logging()
-    if args.json_logs:
-        logging.basicConfig(level=logging.INFO, format='%(message)s')
-        from structlog.stdlib import LoggerFactory
-        structlog.configure(
-            logger_factory=LoggerFactory(),
-            processors=[
-                structlog.stdlib.filter_by_level,
-                structlog.stdlib.add_logger_name,
-                structlog.processors.add_log_level,
-                structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
-                structlog.processors.format_exc_info,
-                structlog.processors.JSONRenderer()
-            ])
-        logger.info('tx-mining-service', backend=args.backend)
-        logger.info('Logging with json format...')
-    elif os.path.exists(args.log_config):
-        logging.config.fileConfig(args.log_config)
-        from structlog.stdlib import LoggerFactory
-        structlog.configure(logger_factory=LoggerFactory())
-        logger.info('tx-mining-service', backend=args.backend)
-        logger.info('Configuring log...', log_config=args.log_config)
-    else:
-        logger.info('tx-mining-service', backend=args.backend)
-        logger.info('Log config file not found; using default configuration.', log_config=args.log_config)
+        logger.info('Asking all miners to reconnect...')
+        self.manager.ask_miners_to_reconnect()
 
-    # Set up all parts.
-    loop = asyncio.get_event_loop()
+        self.loop.stop()
 
-    backend = HathorClient(args.backend)
-    manager = TxMiningManager(
-        backend=backend,
-        address=args.address,
-    )
+    def register_signal_handlers(self) -> None:
+        """Register signal handlers."""
+        import signal
 
-    if args.block_template_update_interval:
-        manager.block_template_update_interval = args.block_template_update_interval
+        logger.info('Registering signal handlers...')
 
-    loop.run_until_complete(backend.start())
-    loop.run_until_complete(manager.start())
-    server = loop.run_until_complete(loop.create_server(manager, '0.0.0.0', args.stratum_port))
-    tx_filters: List[TXFilter] = []
-    toiclient: Optional[TOIAsyncClient] = None
+        sigterm = getattr(signal, 'SIGTERM', None)
+        if sigterm is not None:
+            signal.signal(sigterm, self.sigterm_handler)
 
-    if args.prometheus:
-        from txstratum.prometheus import PrometheusExporter
-        metrics = PrometheusExporter(manager, args.prometheus)
-        metrics.start()
+    def configure_logging(self, args: Namespace):
+        """Configure logging."""
+        from txstratum.utils import start_logging
 
-    if args.prometheus_port:
-        from txstratum.prometheus import HttpPrometheusExporter
-        http_metrics = HttpPrometheusExporter(manager, args.prometheus_port)
-        http_metrics.start()
-        logger.info('Prometheus metrics server running at 0.0.0.0:{}...'.format(args.prometheus_port))
+        start_logging()
+        if args.json_logs:
+            logging.basicConfig(level=logging.INFO, format='%(message)s')
+            from structlog.stdlib import LoggerFactory
+            structlog.configure(
+                logger_factory=LoggerFactory(),
+                processors=[
+                    structlog.stdlib.filter_by_level,
+                    structlog.stdlib.add_logger_name,
+                    structlog.processors.add_log_level,
+                    structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+                    structlog.processors.format_exc_info,
+                    structlog.processors.JSONRenderer()
+                ])
+            logger.info('tx-mining-service', backend=args.backend)
+            logger.info('Logging with json format...')
+        elif os.path.exists(args.log_config):
+            logging.config.fileConfig(args.log_config)
+            from structlog.stdlib import LoggerFactory
+            structlog.configure(logger_factory=LoggerFactory())
+            logger.info('tx-mining-service', backend=args.backend)
+            logger.info('Configuring log...', log_config=args.log_config)
+        else:
+            logger.info('tx-mining-service', backend=args.backend)
+            logger.info('Log config file not found; using default configuration.', log_config=args.log_config)
 
-    if args.ban_addrs or args.ban_tx_ids:
-        tx_filters.append(FileFilter.load_from_files(args.ban_tx_ids, args.ban_addrs))
 
-    if args.toi_url or args.toi_apikey:
-        if not (args.toi_url and args.toi_apikey):
-            raise ValueError("Should pass both toi_url and toi_apikey")
-        toiclient = TOIAsyncClient(args.toi_url, args.toi_apikey)
-        tx_filters.append(TOIFilter(toiclient, block=args.toi_fail_block))
+    def execute(self, args: Namespace) -> None:
+        """Run the service according to the args."""
+        from hathorlib.client import HathorClient
 
-    api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
-                  tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp,
-                  only_standard_script=not args.allow_non_standard_script, tx_filters=tx_filters)
-    logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
-                max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
-                only_standard_script=api_app.only_standard_script, tx_filters=tx_filters)
+        from txstratum.api import App
+        from txstratum.filters import FileFilter, TOIFilter, TXFilter
+        from txstratum.manager import TxMiningManager
+        from txstratum.toi_client import TOIAsyncClient
 
-    web_runner = web.AppRunner(api_app.app, logger=logger)
-    loop.run_until_complete(web_runner.setup())
-    site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)
-    loop.run_until_complete(site.start())
+        self.configure_logging(args)
 
-    try:
-        logger.info('Stratum Server running at 0.0.0.0:{}...'.format(args.stratum_port))
-        logger.info('TxMining API running at 0.0.0.0:{}...'.format(args.api_port))
-        if args.testnet:
-            logger.info('Running with testnet config file')
-        loop.run_forever()
-    except KeyboardInterrupt:
+        # Set up all parts.
+        loop = asyncio.get_event_loop()
+        self.loop = loop
+
+        backend = HathorClient(args.backend)
+        manager = TxMiningManager(
+            backend=backend,
+            address=args.address,
+        )
+        self.manager = manager
+
+        if args.block_template_update_interval:
+            manager.block_template_update_interval = args.block_template_update_interval
+
+        loop.run_until_complete(backend.start())
+        loop.run_until_complete(manager.start())
+        server = loop.run_until_complete(loop.create_server(manager, '0.0.0.0', args.stratum_port))
+        tx_filters: List[TXFilter] = []
+        toiclient: Optional[TOIAsyncClient] = None
+
+        if args.prometheus:
+            from txstratum.prometheus import PrometheusExporter
+            metrics = PrometheusExporter(manager, args.prometheus)
+            metrics.start()
+
+        if args.prometheus_port:
+            from txstratum.prometheus import HttpPrometheusExporter
+            http_metrics = HttpPrometheusExporter(manager, args.prometheus_port)
+            http_metrics.start()
+            logger.info('Prometheus metrics server running at 0.0.0.0:{}...'.format(args.prometheus_port))
+
+        if args.ban_addrs or args.ban_tx_ids:
+            tx_filters.append(FileFilter.load_from_files(args.ban_tx_ids, args.ban_addrs))
+
+        if args.toi_url or args.toi_apikey:
+            if not (args.toi_url and args.toi_apikey):
+                raise ValueError("Should pass both toi_url and toi_apikey")
+            toiclient = TOIAsyncClient(args.toi_url, args.toi_apikey)
+            tx_filters.append(TOIFilter(toiclient, block=args.toi_fail_block))
+
+        api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
+                    tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp,
+                    only_standard_script=not args.allow_non_standard_script, tx_filters=tx_filters)
+        logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
+                    max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
+                    only_standard_script=api_app.only_standard_script, tx_filters=tx_filters)
+
+        web_runner = web.AppRunner(api_app.app, logger=logger)
+        loop.run_until_complete(web_runner.setup())
+        site = web.TCPSite(web_runner, '0.0.0.0', args.api_port)
+        loop.run_until_complete(site.start())
+
+        self.register_signal_handlers()
+
+        try:
+            logger.info('Stratum Server running at 0.0.0.0:{}...'.format(args.stratum_port))
+            logger.info('TxMining API running at 0.0.0.0:{}...'.format(args.api_port))
+            if args.testnet:
+                logger.info('Running with testnet config file')
+            loop.run_forever()
+        except KeyboardInterrupt:
+            pass
+
         logger.info('Stopping...')
-
-    for tx_filter in tx_filters:
-        loop.run_until_complete(tx_filter.close())
-    server.close()
-    loop.run_until_complete(server.wait_closed())
-    loop.run_until_complete(backend.stop())
-    loop.close()
+        for tx_filter in tx_filters:
+            loop.run_until_complete(tx_filter.close())
+        server.close()
+        loop.run_until_complete(server.wait_closed())
+        loop.run_until_complete(backend.stop())
+        loop.close()
 
 
 def main() -> None:
@@ -162,4 +200,4 @@ def main() -> None:
         if not os.environ.get('TXMINING_CONFIG_FILE'):
             os.environ['TXMINING_CONFIG_FILE'] = 'hathorlib.conf.testnet'
 
-    execute(args)
+    RunService().execute(args)

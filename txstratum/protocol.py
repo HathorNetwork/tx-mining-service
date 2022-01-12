@@ -129,6 +129,13 @@ class StratumProtocol(JSONRPCProtocol):
         if self.refresh_job_task:
             asyncio.ensure_future(self.refresh_job_task.stop())
 
+    def ask_miner_to_reconnect(self) -> None:
+        """Ask the miner to reconnect."""
+        self.log.info('Asking miner to reconnect')
+        self.send_request('client.reconnect', [], None)
+
+        self.transport.close()
+
     def start_periodic_tasks(self) -> None:
         """Start periodic tasks."""
         if self.estimator_task is None:

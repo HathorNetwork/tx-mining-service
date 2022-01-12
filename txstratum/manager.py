@@ -100,6 +100,11 @@ class TxMiningManager:
         self.connections.pop(protocol.miner_id)
         self.miners.pop(protocol.miner_id, None)
 
+    def ask_miners_to_reconnect(self) -> None:
+        """Ask miners to reconnect."""
+        for protocol in self.miners.values():
+            protocol.ask_miner_to_reconnect()
+
     def mark_connection_as_ready(self, protocol: StratumProtocol) -> None:
         """Mark a miner as ready to mine. It is called by StratumProtocol."""
         self.miners[protocol.miner_id] = protocol
