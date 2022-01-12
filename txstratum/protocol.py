@@ -348,13 +348,11 @@ class StratumProtocol(JSONRPCProtocol):
         """Refresh miner's job, updating timestamp.
 
         This is run as a periodic task.
-        Its purpose is to make sure that new tx jobs are always prioritized over blocks.
-
         """
         assert self.current_job is not None
 
-        # XXX Can this decrease the overhead of switching jobs in cgminer?
-        # If the miner is already mining a Tx, we do not interfere
+        # If the miner is already mining a Tx, we do not interfere, otherwise we
+        # would be making it switch jobs unnecessarily.
         if isinstance(self.current_job, MinerTxJob):
             return
 
