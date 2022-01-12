@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
 from hathorlib.utils import decode_address
 from structlog import get_logger
+from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 
 import txstratum.time
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
@@ -56,6 +57,7 @@ class TxMiningManager:
         self.block_template_updated_at: float = 0
         self.block_template: Optional['BlockTemplate'] = None
         self.block_template_update_interval = self.DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL
+        self.refuse_new_jobs = False
 
         # Statistics
         self.txs_solved: int = 0
@@ -220,12 +222,16 @@ class TxMiningManager:
 
     def add_job(self, job: TxJob) -> bool:
         """Add new tx to be mined."""
+        if self.refuse_new_jobs:
+            # Will refuse new jobs only while shutting down the service
+            raise NewJobRefused
+
         if job.uuid in self.tx_jobs:
             prev_job = self.tx_jobs[job.uuid]
             if prev_job.status == JobStatus.TIMEOUT:
                 self._job_clean_up(prev_job)
             else:
-                return False
+                raise JobAlreadyExists
         self.tx_jobs[job.uuid] = job
 
         miners_hashrate_ghs = sum(x.hashrate_ghs for x in self.miners.values())
@@ -237,7 +243,6 @@ class TxMiningManager:
             asyncio.ensure_future(self.add_parents(job))
         else:
             self.enqueue_tx_job(job)
-        return True
 
     async def add_parents(self, job: TxJob) -> None:
         """Add tx parents to job, then enqueue it."""

@@ -58,8 +58,10 @@ class RunService:
         """Gracefully shutdown the service."""
         logger.info('Gracefully shutting down...')
 
+        self.manager.refuse_new_jobs = True
+
         while len(self.manager.tx_queue) > 0:
-            logger.info('Waiting for txs to be mined...', txs_left=len(self.manager.tx_queue))
+            logger.info('Waiting for pending txs to finish...', txs_left=len(self.manager.tx_queue))
             await asyncio.sleep(2)
 
         logger.info('Asking all miners to reconnect...')
@@ -194,6 +196,7 @@ class RunService:
         server.close()
         loop.run_until_complete(server.wait_closed())
         loop.run_until_complete(backend.stop())
+        loop.run_until_complete(manager.stop())
         loop.close()
 
 
