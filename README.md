@@ -47,7 +47,9 @@ Those are the most important events that happen in the system:
 
 We will talk more about each event in the next sections.
 
-### A new miner connects
+Another section will be about what triggers an update in the job the miners are working on.
+
+### Event: A new miner connects
 When a new miner connects, a new instance of the protocol module is created for it and registered in the manager.
 
 It starts 2 periodic tasks:
@@ -56,7 +58,7 @@ It starts 2 periodic tasks:
 
 This difficulty adjustment is done to allow us to calculate the hashrate of the miner, by checking how many jobs it submitted in a given period and their weight.
 
-It should be noted that because of this mechanism, the difficulty we assign to jobs can be lower than the difficulty of the block template, in the case of block jobs. Especially in the mainnet, where the difficulty of the network is too high.
+It should be noted that because of this mechanism, the difficulty we assign to jobs will almost certainly be lower than the difficulty of the block template, in the case of block jobs. (Except when running in a local testnet, or in other simple test cases)
 
 This will make the miners sometimes send submissions that are valid for this lower difficulty, but not for the real difficulty we need to solve the block.
 
@@ -72,13 +74,15 @@ This task is important to make sure we prioritize tx jobs over block jobs.
 
 This task runs every 2 seconds.
 
-### A new block template is found
+### Event: A new block template is found
 The manager runs a periodic task every 3 seconds to check if there is a new block template.
 
 If a new one is found, it will try to update the current job of all miners, but only if they are currently mining a block.
 If they are mining a tx, it will do nothing.
 
-### A new job is submitted to the API server
+### Event: A new job is submitted to the API server
+
+The API receives jobs for transactions that need to be mined. You can't submit a job for a block (this wouldn't make sense).
 
 When a new job arrives at the API, it will be added to the manager's job queue.
 
@@ -88,8 +92,30 @@ If the queue was empty, the manager will call an update on all miners jobs, to m
 
 All miners will be working in the same tx job at the same time.
 
-### A job is submitted to the stratum server
+### Event: A job is submitted to the stratum server
 
 If the submitted job is a block job, it will be propagated to the network, and the manager will trigger an update in the block template so that a new block begins mining.
 
 If the submitted job is a tx job, it will be first removed from the queue, then we will instruct all miners that were mining it to stop and get a new job (which could be another tx job, if there is still a tx job in the queue, or a block job).
+
+### When miners get a new job?
+
+- When a new job is received by the API and included in the queue, and the queue was empty, the manager will call an update on all miners jobs, to make them work on the new tx job.
+
+- When a job is submitted, but is not a valid solution for the block/tx, we update the miner job so it gets a new one to work on. See [Event: A new miner connects](#event-a-new-miner-connects) for more details.
+
+- When a new block_template is found, the miners will get a new job to be able to work on the updated block_template. If they were working on a tx job, nothing is done.
+
+- When a miner finds a solution for a tx, all miners get a new job.
+
+- When a miner has just connected
+
+- When a new weight is set by the estimator task. See [Event: A new miner connects](#event-a-new-miner-connects) for more details.
+
+- When the job update task runs.
+
+It should be noted that the Stratum protocol defines a `clean` parameter that can be send to miners when sending them new jobs. This is used to tell the miners to stop working on the current job, and start immediately on the new one.
+
+Sometimes we use this mechanism, for example, to make sure tx jobs are prioritized over block jobs.
+
+Other times we send a clean=false, when it's not really needed that they stop working on the current job.
