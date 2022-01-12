@@ -15,7 +15,7 @@ from hathorlib.utils import decode_address
 from structlog import get_logger
 
 import txstratum.time
-from txstratum.jobs import MinerBlockJob, MinerTxJob
+from txstratum.jobs import MinerBlockJob
 from txstratum.utils import JSONRPCError, JSONRPCId, JSONRPCProtocol, MaxSizeOrderedDict, Periodic
 
 if TYPE_CHECKING:
