@@ -22,8 +22,8 @@ class JobStatus(enum.Enum):
     """Job status."""
 
     PENDING = 'pending'
-    ENQUEUED = 'enqueued'
     GETTING_PARENTS = 'getting-parents'
+    ENQUEUED = 'enqueued'
     MINING = 'mining'
     DONE = 'done'
     FAILED = 'failed'

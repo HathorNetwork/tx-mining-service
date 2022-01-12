@@ -237,6 +237,9 @@ class StratumProtocol(JSONRPCProtocol):
             self.set_current_weight(self.current_weight + 1)
 
         if obj.verify_pow():
+            # We need to verify if the submited solution is valid, because we may
+            # have sent to the miner a job with weight below the weight needed
+            # to solve the block.
             self.manager.submit_solution(self, job, obj.get_struct_nonce())
             if obj.is_block:
                 self.blocks_found += 1
@@ -244,7 +247,7 @@ class StratumProtocol(JSONRPCProtocol):
                 self.txs_solved += 1
 
         else:
-            # Get a new job.
+            # If the solution is not valid, get a new job.
             self.manager.update_miner_job(self, clean=True)
 
     def method_configure(self, params: Any, msgid: JSONRPCId) -> None:
@@ -252,7 +255,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         See: https://github.com/slushpool/stratumprotocol/blob/master/stratum-extensions.mediawiki
         """
-        self.log.debug('handle configure', msgid=msgid, params=params)
+        self.log.debug('handle conaboutfigure', msgid=msgid, params=params)
         exts, exts_params = params
         res: Dict[str, Any] = {ext: False for ext in exts}
 
@@ -309,6 +312,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         return {
             'id': self.miner_id,
+            'version': self.miner_version,
             'hashrate_ghs': self.hashrate_ghs,
             'weight': self.current_weight,
             'miner_address': self.miner_address_str,
