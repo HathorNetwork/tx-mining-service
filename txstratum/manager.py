@@ -35,7 +35,7 @@ class TxMiningManager:
     When a new tx arrives, manager calls `miner.update_job()`.
     """
 
-    BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0  # seconds
+    DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0  # seconds
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
     def __init__(self, backend: 'HathorClient', address: Optional[str] = None):
@@ -55,6 +55,7 @@ class TxMiningManager:
         self.latest_submitted_block_height: int = -1
         self.block_template_updated_at: float = 0
         self.block_template: Optional['BlockTemplate'] = None
+        self.block_template_update_interval = self.DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL
 
         # Statistics
         self.txs_solved: int = 0
@@ -69,7 +70,7 @@ class TxMiningManager:
     async def start(self) -> None:
         """Start the manager."""
         self.started_at = txstratum.time.time()
-        self.update_block_task = Periodic(self.update_block_template, self.BLOCK_TEMPLATE_UPDATE_INTERVAL)
+        self.update_block_task = Periodic(self.update_block_template, self.block_template_update_interval)
         await self.update_block_task.start()
 
     async def wait_for_block_template(self, interval: float = 0.1) -> None:
