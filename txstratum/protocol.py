@@ -351,11 +351,6 @@ class StratumProtocol(JSONRPCProtocol):
         """
         assert self.current_job is not None
 
-        # If the miner is already mining a Tx, we do not interfere, otherwise we
-        # would be making it switch jobs unnecessarily.
-        if isinstance(self.current_job, MinerTxJob):
-            return
-
         self.manager.update_miner_job(self, clean=False)
 
     def update_job(self, job: 'MinerJob', *, clean: bool) -> None:
