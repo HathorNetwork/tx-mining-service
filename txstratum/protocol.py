@@ -226,6 +226,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.send_result(msgid, 'ok')
 
         if isinstance(job, MinerBlockJob):
+            assert job.started_at is not None
             dt = job.submitted_at - job.started_at
             self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight, dt))
         # Too many jobs too fast, increase difficulty out of caution (more than 10 submits within the last 10s)
