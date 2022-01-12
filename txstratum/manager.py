@@ -283,7 +283,7 @@ class TxMiningManager:
         try:
             self.tx_queue.remove(job)
         except ValueError:
-            self.log.warning('TxJob timeout but not in queue', job=job)
+            self.log.error('TxJob timeout but not in queue. This shouldnt happen', job=job)
         self.stop_mining_tx(job)
         # Schedule to clean it up.
         self.schedule_job_clean_up(job)
