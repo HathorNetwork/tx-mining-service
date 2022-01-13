@@ -112,9 +112,15 @@ class TxMiningManager:
             # We do not have a job for the miner. We could close the connection,
             # but we do not do it because a TxJob might arrive anytime.
             return
-        # TODO Set clean based on old job vs. new job
+
         if isinstance(job, MinerTxJob):
-            clean = True
+            is_same_job = isinstance(protocol.current_job, MinerTxJob) and job.tx_job == protocol.current_job.tx_job
+
+            if not is_same_job:
+                # This will tell the miner to abandon its current job and start this immediately.
+                # We do not need to force this if the job is the same.
+                clean = True
+
         protocol.update_job(job, clean=clean)
 
     def submit_solution(self, protocol: StratumProtocol, job: MinerJob, nonce: bytes) -> None:
@@ -313,7 +319,7 @@ class TxMiningManager:
             if protocol.current_job is not None and not protocol.current_job.is_block:
                 assert isinstance(protocol.current_job, MinerTxJob)
                 if protocol.current_job.tx_job == job:
-                    self.update_miner_job(protocol)
+                    self.update_miner_job(protocol, clean=True)
 
     def _job_clean_up(self, job: TxJob) -> None:
         """Clean up tx job. It is scheduled after a tx is solved."""

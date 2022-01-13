@@ -706,6 +706,71 @@ class ManagerTestCase(unittest.TestCase):
         self.assertIsNotNone(conn2.current_job)
         self.assertEqual(job1, conn2.current_job.tx_job)
 
+    def test_refresh_tx_job(self):
+        """Test running the refresh job task when the miner is mining a TxJob.
+        The miner shouldn't be told to replace the TxJob by itself with the clean=True param.
+        For a different TxJob, the miner should be told to replace the TxJob.
+        """
+        conn = self._get_ready_miner()
+        self.assertIsNotNone(conn.current_job)
+        self.assertTrue(conn.current_job.is_block)
+        self.assertEqual(0, conn.current_job.height)
+
+        job1 = TxJob(TX1_DATA)
+        ret1 = self.manager.add_job(job1)
+        self.assertFalse(conn.current_job.is_block)
+        self.assertEqual(conn.current_job.tx_job, job1)
+        self.assertTrue(ret1)
+
+        conn.send_request = MagicMock(return_value=None)
+        conn.send_request.assert_not_called()
+
+        current_job = conn.current_job
+
+        # Run the refresh job task
+        self.loop.run_until_complete(conn.refresh_job())
+        self._run_all_pending_events()
+
+        # Make sure all jobs sent to the miner had clean=False
+        # and that they were all the same txJob
+        for c in conn.send_request.mock_calls:
+            args = c[1]
+            job_data = args[1]
+            self.assertEqual(job_data['clean'], False)
+            self.assertEqual(job_data['data'], current_job.get_header_without_nonce().hex())
+
+        conn.send_request.reset_mock()
+
+        # Add a new job
+        job2 = TxJob(TX2_DATA)
+        ret2 = self.manager.add_job(job2)
+        self.assertFalse(conn.current_job.is_block)
+        self.assertNotEqual(conn.current_job.tx_job, job2)
+        self.assertTrue(ret2)
+
+        # Shouldn't send a new job to the miner, since it's already mining a tx
+        conn.send_request.assert_not_called()
+
+        # Submit the current job
+        params = {
+            'job_id': conn.current_job.uuid.hex(),
+            'nonce': TX1_NONCE,
+        }
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, 'ok')
+
+        self.assertIs(conn.current_job.tx_job, job2)
+
+        # Should have sent a new txJob to the miner, with clean=True
+        conn.send_request.assert_called_once()
+        job_data = conn.send_request.call_args[0][1]
+
+        self.assertEqual(job_data['clean'], True)
+        self.assertEqual(job_data['data'], conn.current_job.get_header_without_nonce().hex())
+
 
 class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
     def setUp(self):
