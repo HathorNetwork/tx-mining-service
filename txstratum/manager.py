@@ -132,10 +132,25 @@ class TxMiningManager:
 
         else:
             assert isinstance(job, MinerTxJob)
-            # Remove from queue.
             tx_job = job.tx_job
-            tx_job2 = self.tx_queue.popleft()
-            assert tx_job is tx_job2
+
+            if tx_job.status in JobStatus.get_after_mining_states():
+                # This can happen if two miners submitted a solution to the same job, for instance
+                self.log.debug(
+                    f"Received solution for a job with status {tx_job.status}",
+                    job_id=tx_job.uuid.hex(),
+                )
+                return
+
+            try:
+                # Remove from queue.
+                self.tx_queue.remove(tx_job)
+            except ValueError:
+                self.log.warning(
+                    "Tried removing a job that was not in the queue.",
+                    job_id=tx_job.uuid.hex(),
+                )
+
             # Schedule to clean it up.
             self.schedule_job_clean_up(tx_job)
             # Mark as solved, stop mining it, and propagate if requested.
@@ -265,7 +280,10 @@ class TxMiningManager:
         self.log.info('TxJob timeout', job=job.to_dict())
         self.txs_timeout += 1
         job.status = JobStatus.TIMEOUT
-        self.tx_queue.remove(job)
+        try:
+            self.tx_queue.remove(job)
+        except ValueError:
+            self.log.error('TxJob timeout but not in queue. This shouldnt happen', job=job)
         self.stop_mining_tx(job)
         # Schedule to clean it up.
         self.schedule_job_clean_up(job)

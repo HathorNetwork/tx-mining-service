@@ -26,6 +26,12 @@ Or you can use the Docker image
 We also have a public Docker image if you don't want to build it yourself:
     docker run -it --network="host" hathornetwork/tx-mining-service <full-node-address:port> --address <mining-reward-address> --api-port 8080 --stratum-port 8000
 
+### Debug logs
+
+If you need to enable debug logs, you should edit the file `log.conf` and set the log level there.
+
+You could also use a completely different file to configure the logs, by using the parameter `log-config` when running the service.
+
 
 ## How to test?
 
