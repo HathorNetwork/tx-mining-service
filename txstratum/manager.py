@@ -112,9 +112,15 @@ class TxMiningManager:
             # We do not have a job for the miner. We could close the connection,
             # but we do not do it because a TxJob might arrive anytime.
             return
-        # TODO Set clean based on old job vs. new job
+
         if isinstance(job, MinerTxJob):
-            clean = True
+            is_same_job = isinstance(protocol.current_job, MinerTxJob) and job.tx_job == protocol.current_job.tx_job
+
+            if not is_same_job:
+                # This will tell the miner to abandon its current job and start this immediately.
+                # We do not need to force this if the job is the same.
+                clean = True
+
         protocol.update_job(job, clean=clean)
 
     def submit_solution(self, protocol: StratumProtocol, job: MinerJob, nonce: bytes) -> None:
@@ -132,10 +138,25 @@ class TxMiningManager:
 
         else:
             assert isinstance(job, MinerTxJob)
-            # Remove from queue.
             tx_job = job.tx_job
-            tx_job2 = self.tx_queue.popleft()
-            assert tx_job is tx_job2
+
+            if tx_job.status in JobStatus.get_after_mining_states():
+                # This can happen if two miners submitted a solution to the same job, for instance
+                self.log.debug(
+                    f"Received solution for a job with status {tx_job.status}",
+                    job_id=tx_job.uuid.hex(),
+                )
+                return
+
+            try:
+                # Remove from queue.
+                self.tx_queue.remove(tx_job)
+            except ValueError:
+                self.log.warning(
+                    "Tried removing a job that was not in the queue.",
+                    job_id=tx_job.uuid.hex(),
+                )
+
             # Schedule to clean it up.
             self.schedule_job_clean_up(tx_job)
             # Mark as solved, stop mining it, and propagate if requested.
@@ -265,7 +286,10 @@ class TxMiningManager:
         self.log.info('TxJob timeout', job=job.to_dict())
         self.txs_timeout += 1
         job.status = JobStatus.TIMEOUT
-        self.tx_queue.remove(job)
+        try:
+            self.tx_queue.remove(job)
+        except ValueError:
+            self.log.error('TxJob timeout but not in queue. This shouldnt happen', job=job)
         self.stop_mining_tx(job)
         # Schedule to clean it up.
         self.schedule_job_clean_up(job)
@@ -295,7 +319,7 @@ class TxMiningManager:
             if protocol.current_job is not None and not protocol.current_job.is_block:
                 assert isinstance(protocol.current_job, MinerTxJob)
                 if protocol.current_job.tx_job == job:
-                    self.update_miner_job(protocol)
+                    self.update_miner_job(protocol, clean=True)
 
     def _job_clean_up(self, job: TxJob) -> None:
         """Clean up tx job. It is scheduled after a tx is solved."""
