@@ -748,7 +748,7 @@ class ManagerTestCase(unittest.TestCase):
         self.assertNotEqual(conn.current_job.tx_job, job2)
         self.assertTrue(ret2)
 
-        ## Shouldn't send a new job to the miner, since it's already mining a tx
+        # Shouldn't send a new job to the miner, since it's already mining a tx
         conn.send_request.assert_not_called()
 
         # Submit the current job
@@ -764,7 +764,7 @@ class ManagerTestCase(unittest.TestCase):
 
         self.assertIs(conn.current_job.tx_job, job2)
 
-        ## Should have sent a new txJob to the miner, with clean=True
+        # Should have sent a new txJob to the miner, with clean=True
         conn.send_request.assert_called_once()
         job_data = conn.send_request.call_args[0][1]
 
