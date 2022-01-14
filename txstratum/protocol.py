@@ -55,6 +55,7 @@ class StratumProtocol(JSONRPCProtocol):
     INVALID_SOLUTION = JSONRPCError(30, 'Invalid solution')
     STALE_JOB = JSONRPCError(31, 'Stale job submitted')
     JOB_NOT_FOUND = JSONRPCError(32, 'Job not found')
+    SERVICE_SHUTTING_DOWN = JSONRPCError(40, 'Service shutting down')
 
     def __init__(self, manager: 'TxMiningManager'):
         """Init StratumProcol to receive a new connection."""
@@ -76,6 +77,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.started_at: float = 0.0
         self.estimator_task: Optional[Periodic] = None
         self.refresh_job_task: Optional[Periodic] = None
+        self.refuse_new_miners: bool = False
 
         # For testing only.
         self._update_job_timestamp: bool = True
@@ -130,7 +132,7 @@ class StratumProtocol(JSONRPCProtocol):
             asyncio.ensure_future(self.refresh_job_task.stop())
 
     def ask_miner_to_reconnect(self) -> None:
-        """Ask the miner to reconnect."""
+        """Ask the miner to reconnect. We just want to force it to disconnect with this."""
         self.log.info('Asking miner to reconnect')
         self.send_request('client.reconnect', [], None)
 
@@ -158,6 +160,12 @@ class StratumProtocol(JSONRPCProtocol):
 
     def method_subscribe(self, params: Any, msgid: JSONRPCId) -> None:
         """Handle subscribe request from JSONRPC."""
+
+        if self.refuse_new_miners:
+            self.send_error(msgid, self.SERVICE_SHUTTING_DOWN)
+            self.log.info('Refused miner subscription because we are shutting down', address=self.miner_address_str)
+            return
+
         if params and 'address' in params and params['address'] is not None:
             try:
                 address = params['address']

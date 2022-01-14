@@ -68,8 +68,7 @@ class RunService:
             logger.info('Waiting for pending txs to finish...', txs_left=len(self.manager.tx_queue))
             await asyncio.sleep(2)
 
-        logger.info('Asking all miners to reconnect...')
-        self.manager.ask_miners_to_reconnect()
+        self.manager.shutdown()
 
         self.loop.stop()
 

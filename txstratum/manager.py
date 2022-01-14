@@ -67,7 +67,11 @@ class TxMiningManager:
 
     def __call__(self) -> StratumProtocol:
         """Return an instance of StratumProtocol for a new connection."""
-        return StratumProtocol(self)
+        protocol = StratumProtocol(self)
+
+        if self.refuse_new_jobs:
+            protocol.refuse_new_miners = True
+        return protocol
 
     async def start(self) -> None:
         """Start the manager."""
@@ -102,9 +106,10 @@ class TxMiningManager:
         self.connections.pop(protocol.miner_id)
         self.miners.pop(protocol.miner_id, None)
 
-    def ask_miners_to_reconnect(self) -> None:
-        """Ask miners to reconnect."""
+    def shutdown(self) -> None:
+        """Tasks to be executed before the service is shut down."""
         for protocol in self.miners.values():
+            protocol.refuse_new_miners = True
             protocol.ask_miner_to_reconnect()
 
     def mark_connection_as_ready(self, protocol: StratumProtocol) -> None:
