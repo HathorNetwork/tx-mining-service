@@ -10,9 +10,9 @@ from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
 from structlog import get_logger
-from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 
 import txstratum.time
+from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.utils import tx_or_block_from_bytes
 

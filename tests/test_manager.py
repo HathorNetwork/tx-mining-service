@@ -7,12 +7,14 @@ LICENSE file in the root directory of this source tree.
 
 import asyncio
 import unittest
+import pytest
 from collections import deque
 from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
 import asynctest  # type: ignore
 from hathorlib.client import BlockTemplate, HathorClient
+from txstratum.exceptions import JobAlreadyExists
 
 import txstratum.time
 from txstratum.jobs import JobStatus, TxJob
@@ -852,8 +854,8 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
 
         # When a similar job is submitted, manager declines it.
         job2 = TxJob(TX1_DATA)
-        ret2 = self.manager.add_job(job2)
-        self.assertFalse(ret2)
+        with pytest.raises(JobAlreadyExists):
+            self.manager.add_job(job2)
 
         # Wait until job1 is marked as timeout.
         await self.advance(15)

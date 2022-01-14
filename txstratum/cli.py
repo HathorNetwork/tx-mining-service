@@ -3,12 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import asyncio
-from asyncio.events import AbstractEventLoop
 import logging
 import logging.config
 import os
 from argparse import ArgumentParser, Namespace
-from typing import Any, List, Optional
+from asyncio.events import AbstractEventLoop
+from typing import List, Optional
 
 import structlog
 from aiohttp import web
@@ -20,6 +20,7 @@ logger = get_logger()
 
 
 DEFAULT_LOGGING_CONFIG_FILE = "log.conf"
+
 
 def create_parser() -> ArgumentParser:
     """Create a parser for the cmdline arguments."""
@@ -50,7 +51,10 @@ def create_parser() -> ArgumentParser:
     logs.add_argument('--json-logs', help='Enabled logging in json', default=False, action='store_true')
     return parser
 
+
 class RunService:
+    """This is the main class of the service. It starts everything up."""
+
     manager: TxMiningManager
     loop: AbstractEventLoop
 
@@ -70,7 +74,7 @@ class RunService:
         self.loop.stop()
 
     def sigterm_handler(self) -> None:
-        """Called when SIGTERM signal is received."""
+        """Handle SIGTERM signal."""
         logger.info('SIGTERM received.')
 
         self.loop.create_task(self.graceful_shutdown())
@@ -85,7 +89,7 @@ class RunService:
         if sigterm is not None:
             self.loop.add_signal_handler(sigterm, self.sigterm_handler)
 
-    def configure_logging(self, args: Namespace):
+    def configure_logging(self, args: Namespace) -> None:
         """Configure logging."""
         from txstratum.utils import start_logging
 
@@ -114,7 +118,6 @@ class RunService:
         else:
             logger.info('tx-mining-service', backend=args.backend)
             logger.info('Log config file not found; using default configuration.', log_config=args.log_config)
-
 
     def execute(self, args: Namespace) -> None:
         """Run the service according to the args."""
@@ -168,11 +171,13 @@ class RunService:
             tx_filters.append(TOIFilter(toiclient, block=args.toi_fail_block))
 
         api_app = App(manager, max_tx_weight=args.max_tx_weight, max_timestamp_delta=args.max_timestamp_delta,
-                    tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp,
-                    only_standard_script=not args.allow_non_standard_script, tx_filters=tx_filters)
+                      tx_timeout=args.tx_timeout, fix_invalid_timestamp=args.fix_invalid_timestamp,
+                      only_standard_script=not args.allow_non_standard_script, tx_filters=tx_filters)
         logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
-                    max_timestamp_delta=api_app.max_timestamp_delta, fix_invalid_timestamp=api_app.fix_invalid_timestamp,
-                    only_standard_script=api_app.only_standard_script, tx_filters=tx_filters)
+                    max_timestamp_delta=api_app.max_timestamp_delta,
+                    fix_invalid_timestamp=api_app.fix_invalid_timestamp,
+                    only_standard_script=api_app.only_standard_script,
+                    tx_filters=tx_filters)
 
         web_runner = web.AppRunner(api_app.app, logger=logger)
         loop.run_until_complete(web_runner.setup())

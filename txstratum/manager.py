@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
 from hathorlib.utils import decode_address
 from structlog import get_logger
-from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 
 import txstratum.time
+from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.utils import Periodic, calculate_expected_mining_time
@@ -264,6 +264,8 @@ class TxMiningManager:
             asyncio.ensure_future(self.add_parents(job))
         else:
             self.enqueue_tx_job(job)
+
+        return True
 
     async def add_parents(self, job: TxJob) -> None:
         """Add tx parents to job, then enqueue it."""
