@@ -233,6 +233,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.send_result(msgid, 'ok')
 
         if isinstance(job, MinerBlockJob):
+            assert job.started_at is not None
             dt = job.submitted_at - job.started_at
             self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight, dt))
         # Too many jobs too fast, increase difficulty out of caution (more than 10 submits within the last 10s)
@@ -349,12 +350,21 @@ class StratumProtocol(JSONRPCProtocol):
         return self.current_job.is_block
 
     async def refresh_job(self) -> None:
-        """Refresh miner's job, updating timestamp."""
+        """Refresh miner's job, updating timestamp.
+
+        This is run as a periodic task.
+        """
         assert self.current_job is not None
+
         self.manager.update_miner_job(self, clean=False)
 
     def update_job(self, job: 'MinerJob', *, clean: bool) -> None:
-        """Update miner's job. It is called by the manager."""
+        """Update miner's job. It is called by the manager.
+
+        :param job: new job
+        :param clean: if clean is True, the miner will be forced to abort the
+            current job and immediately start mining the new job
+        """
         # Set job's share weight
         job.share_weight = min(self.current_weight, job.get_weight())
 
