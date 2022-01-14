@@ -7,16 +7,16 @@ LICENSE file in the root directory of this source tree.
 
 import asyncio
 import unittest
-import pytest
 from collections import deque
 from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
 import asynctest  # type: ignore
+import pytest
 from hathorlib.client import BlockTemplate, HathorClient
-from txstratum.exceptions import JobAlreadyExists
 
 import txstratum.time
+from txstratum.exceptions import JobAlreadyExists
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
