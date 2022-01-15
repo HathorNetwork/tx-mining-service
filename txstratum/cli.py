@@ -70,8 +70,6 @@ class RunService:
 
         self.manager.shutdown()
 
-        self.loop.stop()
-
     def sigterm_handler(self) -> None:
         """Handle SIGTERM signal."""
         logger.info('SIGTERM received.')

@@ -134,6 +134,7 @@ class StratumProtocol(JSONRPCProtocol):
     def ask_miner_to_reconnect(self) -> None:
         """Ask the miner to reconnect. We just want to force it to disconnect with this."""
         self.log.info('Asking miner to reconnect')
+        self.send_request('client.show_message', ['Will force reconnection'], None)
         self.send_request('client.reconnect', [], None)
 
         self.transport.close()
