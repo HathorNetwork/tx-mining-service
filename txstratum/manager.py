@@ -57,9 +57,6 @@ class TxMiningManager:
         self.block_template: Optional['BlockTemplate'] = None
         self.block_template_update_interval = self.DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL
 
-        # Customizable options
-        self.tx_distribution_by_miner_type: bool = False
-
         # Statistics
         self.txs_solved: int = 0
         self.blocks_found: int = 0
@@ -342,11 +339,6 @@ class TxMiningManager:
         if len(self.tx_queue) == 0:
             return self.get_block_job()
 
-        should_distribute_txs_by_miner_type = self.tx_distribution_by_miner_type and len(self.miner_types) > 1
-
-        if should_distribute_txs_by_miner_type:
-            return self.get_best_tx_job_by_miner_type(protocol)
-
         return self.get_best_tx_job()
 
     def get_best_tx_job(self) -> Optional[MinerJob]:
@@ -358,21 +350,6 @@ class TxMiningManager:
         if job.status != JobStatus.MINING:
             job.status = JobStatus.MINING
         return MinerTxJob(job)
-
-    def get_best_tx_job_by_miner_type(self, protocol: StratumProtocol) -> Optional[MinerJob]:
-        """Return best tx job."""
-        assert len(self.tx_queue) > 0
-        assert len(self.miner_types) > 1
-
-
-
-        # TODO We will need to measure the distribution of txs by weight of the last txs mined.
-        # Then, define the percentage of txs to be distributed to each miner type, and get the threshold weight to achieve this percentage.
-        # Finally, monitor the time spent by each group mining the txs and adjust the percentages accordingly.
-
-        # TODO Search if there is some algorithm similar to the above one.
-        
-        # TODO How to calculate the expected mining time of a tx job?
 
     def get_block_job(self) -> Optional[MinerJob]:
         """Return block job."""
