@@ -343,7 +343,6 @@ class TxMiningManager:
             if job.status != JobStatus.MINING:
                 job.status = JobStatus.MINING
             return MinerTxJob(job)
-
         if self.block_template is None:
             self.log.error('Cannot generate MinerBlockJob because block_template is empty')
             return None
