@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
 from hathorlib.utils import decode_address
 from structlog import get_logger
-from txstratum.pubsub import PubSubManager, TxMiningEvents
 
 import txstratum.time
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
 from txstratum.protocol import StratumProtocol
+from txstratum.pubsub import PubSubManager, TxMiningEvents
 from txstratum.utils import Periodic, calculate_expected_mining_time
 
 if TYPE_CHECKING:

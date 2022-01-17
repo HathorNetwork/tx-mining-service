@@ -110,10 +110,15 @@ class TxJob:
 
     def get_mining_time(self) -> float:
         """Return the time it took to mine the job."""
+        assert self.submitted_at is not None
+        assert self.started_at is not None
+
         return self.submitted_at - self.started_at
 
     def get_waiting_time(self) -> float:
         """Return the time it took to start mining the job."""
+        assert self.started_at is not None
+
         return self.started_at - self.created_at
 
     def to_dict(self) -> Dict[str, Any]:

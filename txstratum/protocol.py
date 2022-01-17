@@ -13,10 +13,10 @@ from hathorlib.exceptions import InvalidAddress
 from hathorlib.scripts import binary_to_int
 from hathorlib.utils import decode_address
 from structlog import get_logger
-from txstratum.pubsub import TxMiningEvents
 
 import txstratum.time
 from txstratum.jobs import MinerBlockJob
+from txstratum.pubsub import TxMiningEvents
 from txstratum.utils import JSONRPCError, JSONRPCId, JSONRPCProtocol, MaxSizeOrderedDict, Periodic
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.miner_id: str = str(uuid.uuid4())
         self.miner_address: Optional[bytes] = None
         self.miner_address_str: Optional[str] = None
-        self.miner_version: Optional[str] = None
+        self.miner_version: str = "unknown"
 
         self.jobs: MaxSizeOrderedDict[bytes, 'MinerJob'] = MaxSizeOrderedDict(max=self.MAX_JOBS)
         self.current_job: Optional['MinerJob'] = None
@@ -108,8 +108,8 @@ class StratumProtocol(JSONRPCProtocol):
         }
 
     @property
-    def miner_type(self) -> List[str]:
-        """Returns the type of the connected miner."""
+    def miner_type(self) -> str:
+        """Return the type of the connected miner."""
         return self.miner_version.split('/')[0]
 
     def handle_result(self, result: Any, msgid: JSONRPCId) -> None:

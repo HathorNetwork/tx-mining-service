@@ -1,12 +1,19 @@
 import asyncio
 import os
-from typing import TYPE_CHECKING, Dict, NamedTuple, Union
+from typing import TYPE_CHECKING, Dict, NamedTuple, Union, cast
 
-from prometheus_client import CollectorRegistry, Gauge, Counter, Histogram, start_http_server, write_to_textfile
+from prometheus_client import (  # type: ignore[import]
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    start_http_server,
+    write_to_textfile,
+)
+
 from txstratum.jobs import TxJob
 from txstratum.protocol import StratumProtocol
-from txstratum.pubsub import PubSubManager, TxMiningEvents  # type: ignore
-
+from txstratum.pubsub import PubSubManager, TxMiningEvents
 from txstratum.utils import Periodic
 
 if TYPE_CHECKING:
@@ -27,7 +34,7 @@ METRIC_INFO: Dict[str, str] = {
 }
 
 # Metrics that we update through pubsub events
-METRICS_PUBSUB: Dict[str, str] = {
+METRICS_PUBSUB = {
     'txs_jobs_received': Counter(
         'txs_jobs_received',
         'Number of transactions received by the API',
@@ -125,10 +132,10 @@ class BasePrometheusExporter:
         for _, metric in METRICS_PUBSUB.items():
             self.registry.register(metric)
 
-        self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_SOLVED, self.handle_tx_solved)
-        self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_TIMEOUT, self.handle_tx_timeout)
-        self.pubsub.subscribe(TxMiningEvents.MANAGER_NEW_TX_JOB, self.handle_new_tx_job)
-        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self.handle_protocol_job_completed)
+        self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_SOLVED, self._handle_tx_solved)
+        self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_TIMEOUT, self._handle_tx_timeout)
+        self.pubsub.subscribe(TxMiningEvents.MANAGER_NEW_TX_JOB, self._handle_new_tx_job)
+        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self._handle_protocol_job_completed)
 
     async def update_metrics(self) -> None:
         """Update metric_gauges dict with new data from metrics."""
@@ -144,9 +151,9 @@ class BasePrometheusExporter:
         """Stop exporter."""
         asyncio.ensure_future(self.update_metrics_task.stop())
 
-    async def handle_tx_solved(self, obj: Dict[str, Union[TxJob, StratumProtocol]]) -> None:
-        tx_job = obj['tx_job']
-        protocol = obj['protocol']
+    async def _handle_tx_solved(self, obj: Dict[str, Union[TxJob, StratumProtocol]]) -> None:
+        tx_job = cast(TxJob, obj['tx_job'])
+        protocol = cast(StratumProtocol, obj['protocol'])
 
         METRICS_PUBSUB['txs_solved'].labels(
             miner_type=protocol.miner_type,
@@ -161,15 +168,15 @@ class BasePrometheusExporter:
 
         METRICS_PUBSUB['txs_waiting_time'].observe(tx_job.get_waiting_time())
 
-    async def handle_tx_timeout(self, obj: TxJob) -> None:
+    async def _handle_tx_timeout(self, obj: TxJob) -> None:
         tx_job = obj
 
         METRICS_PUBSUB['txs_timeout_weight'].observe(tx_job.get_weight())
 
-    async def handle_new_tx_job(self, obj: TxJob) -> None:
+    async def _handle_new_tx_job(self, obj: TxJob) -> None:
         METRICS_PUBSUB['txs_jobs_received'].inc()
 
-    async def handle_protocol_job_completed(self, protocol: StratumProtocol) -> None:
+    async def _handle_protocol_job_completed(self, protocol: StratumProtocol) -> None:
         METRICS_PUBSUB['miner_completed_jobs'].labels(
             miner_type=protocol.miner_type,
             miner_address=protocol.miner_address_str
@@ -179,7 +186,13 @@ class BasePrometheusExporter:
 class PrometheusExporter(BasePrometheusExporter):
     """Class that sends hathor metrics to a node exporter that will be read by Prometheus."""
 
-    def __init__(self, manager: 'TxMiningManager', pubsub: 'PubSubManager', path: str, filename: str = 'tx-mining-service.prom'):
+    def __init__(
+        self,
+        manager: 'TxMiningManager',
+        pubsub: 'PubSubManager',
+        path: str,
+        filename: str = 'tx-mining-service.prom'
+    ):
         """Init PrometheusExporter.
 
         :param manager: Manager where the metrics will be collected from

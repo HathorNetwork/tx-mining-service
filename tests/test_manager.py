@@ -113,6 +113,7 @@ def _get_ready_miner(manager: TxMiningManager, address: Optional[str] = None) ->
     conn.method_authorize(params=None, msgid=None)
     return conn
 
+
 class ManagerTestCase(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()

@@ -9,8 +9,8 @@ all: check tests
 tests_lib = ./tests/
 
 pytest_flags = -p no:warnings --cov-report=term --cov-report=html --cov=txstratum
-mypy_tests_flags = --warn-unused-configs --disallow-incomplete-defs --no-implicit-optional --warn-redundant-casts --strict-equality --disallow-subclassing-any --warn-return-any --disallow-untyped-decorators
-mypy_sources_flags = --strict
+mypy_tests_flags = --show-error-code --warn-unused-configs --disallow-incomplete-defs --no-implicit-optional --warn-redundant-casts --strict-equality --disallow-subclassing-any --warn-return-any --disallow-untyped-decorators
+mypy_sources_flags = --strict --show-error-code
 
 #--disallow-any-generics
 #--disallow-untyped-calls

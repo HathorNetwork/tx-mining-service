@@ -12,7 +12,6 @@ from unittest.mock import MagicMock
 
 from tests.utils import async_test
 from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
-from txstratum.pubsub import PubSubManager
 
 
 class TxMiningManagerMock():
@@ -66,6 +65,5 @@ class ManagerTestCase(unittest.TestCase):
 
             # Removes lines with timestamp
             content = list(filter(lambda x: x.find("_created") < 0, content.splitlines()))
-
 
         self.assertEqual(content_expected, content)
