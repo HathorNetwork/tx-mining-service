@@ -110,11 +110,11 @@ class TxJob:
 
     def get_mining_time(self) -> float:
         """Return the time it took to mine the job."""
-        return self.tx_job.submitted_at - self.tx_job.started_at
+        return self.submitted_at - self.started_at
 
     def get_waiting_time(self) -> float:
         """Return the time it took to start mining the job."""
-        return self.tx_job.started_at - self.tx_job.created_at
+        return self.started_at - self.created_at
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dict with an overview of the job.

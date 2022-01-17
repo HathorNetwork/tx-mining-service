@@ -3,7 +3,7 @@ import os
 from typing import TYPE_CHECKING, Dict, NamedTuple, Union
 
 from prometheus_client import CollectorRegistry, Gauge, Counter, Histogram, start_http_server, write_to_textfile
-from txstratum.jobs import MinerJob, MinerTxJob, TxJob
+from txstratum.jobs import TxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.pubsub import PubSubManager, TxMiningEvents  # type: ignore
 

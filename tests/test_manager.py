@@ -122,7 +122,7 @@ class ManagerTestCase(unittest.TestCase):
 
         self.client = HathorClientTest(server_url='')
         self.loop.run_until_complete(self.client.start())
-        self.manager = TxMiningManager(backend=self.client, address=address)
+        self.manager = TxMiningManager(backend=self.client, pubsub=MagicMock(), address=address)
         self.loop.run_until_complete(self.manager.start())
         self.loop.run_until_complete(self.manager.wait_for_block_template())
         self.assertTrue(len(self.manager.block_template) > 0)
@@ -149,7 +149,7 @@ class ManagerTestCase(unittest.TestCase):
         for idx, (cause, invalid_address) in enumerate(invalid_addresses):
             with self.assertRaises(InvalidAddress):
                 print('Address #{}: {} ({})'.format(idx, cause, invalid_address))
-                TxMiningManager(backend=self.client, address=invalid_address)
+                TxMiningManager(backend=self.client, pubsub=None, address=invalid_address)
 
     def test_miner_connect_disconnect(self):
         conn = StratumProtocol(self.manager)
