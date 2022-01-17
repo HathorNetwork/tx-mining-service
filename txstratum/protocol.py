@@ -263,11 +263,6 @@ class StratumProtocol(JSONRPCProtocol):
             else:
                 self.txs_solved += 1
 
-            self.manager.pubsub.emit(TxMiningEvents.PROTOCOL_JOB_SOLVED, {
-                'job': job,
-                'protocol': self,
-            })
-
         else:
             # If the solution is not valid, get a new job.
             self.manager.update_miner_job(self, clean=True)

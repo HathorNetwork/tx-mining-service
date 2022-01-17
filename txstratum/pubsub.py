@@ -8,7 +8,6 @@ class TxMiningEvents(Enum):
     MANAGER_TX_SOLVED = 'manager:tx_solved'
     MANAGER_TX_TIMEOUT = 'manager:tx_timeout'
     MANAGER_NEW_TX_JOB = 'manager:new_tx_job'
-    PROTOCOL_JOB_SOLVED = 'protocol:job_solved'
     PROTOCOL_JOB_COMPLETED = 'protocol:job_completed'
     
 

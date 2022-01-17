@@ -64,6 +64,7 @@ class TxJob:
         self.status: JobStatus = JobStatus.PENDING
         self.message: str = ''
         self.created_at: float = txstratum.time.time()
+        self.started_at: Optional[float] = None
         self.submitted_at: Optional[float] = None
         self.total_time: Optional[float] = None
         self.nonce: Optional[bytes] = None
@@ -106,6 +107,14 @@ class TxJob:
     def get_weight(self) -> float:
         """Return job's weight (difficulty)."""
         return self._tx.weight
+
+    def get_mining_time(self) -> float:
+        """Return the time it took to mine the job."""
+        return self.tx_job.submitted_at - self.tx_job.started_at
+
+    def get_waiting_time(self) -> float:
+        """Return the time it took to start mining the job."""
+        return self.tx_job.started_at - self.tx_job.created_at
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dict with an overview of the job.
@@ -185,6 +194,11 @@ class MinerTxJob(MinerJob):
         assert isinstance(tx_job, TxJob)
         self.tx_job: TxJob = tx_job
 
+        # The tx_job could have been included in other MinerTxJob before, so we
+        # don't want to overwrite it.
+        if not tx_job.started_at:
+            tx_job.started_at = txstratum.time.time()
+
         self._tx: BaseTransaction = tx_job.get_tx().clone()
 
         self.uuid: bytes = uuid.uuid4().bytes
@@ -216,16 +230,6 @@ class MinerTxJob(MinerJob):
     def get_weight(self) -> float:
         """Return job's weight (difficulty)."""
         return self._tx.weight
-
-    # TODO: unit tests
-    def get_mining_time(self) -> float:
-        """Return the time it took to mine the job."""
-        return self.tx_job.submitted_at - self.created_at
-
-    # TODO: unit tests
-    def get_waiting_time(self) -> float:
-        """Return the time it took to start mining the job."""
-        return self.created_at - self.tx_job.created_at
 
 
 class MinerBlockJob(MinerJob):

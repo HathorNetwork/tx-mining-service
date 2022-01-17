@@ -128,7 +128,6 @@ class BasePrometheusExporter:
         self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_SOLVED, self.handle_tx_solved)
         self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_TIMEOUT, self.handle_tx_timeout)
         self.pubsub.subscribe(TxMiningEvents.MANAGER_NEW_TX_JOB, self.handle_new_tx_job)
-        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_JOB_SOLVED, self.handle_protocol_job_solved)
         self.pubsub.subscribe(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self.handle_protocol_job_completed)
 
     async def update_metrics(self) -> None:
@@ -156,6 +155,12 @@ class BasePrometheusExporter:
 
         METRICS_PUBSUB['txs_solved_weight'].observe(tx_job.get_weight())
 
+        METRICS_PUBSUB['txs_mining_time'].labels(
+            miner_type=protocol.miner_type,
+        ).observe(tx_job.get_mining_time())
+
+        METRICS_PUBSUB['txs_waiting_time'].observe(tx_job.get_waiting_time())
+
     async def handle_tx_timeout(self, obj: TxJob) -> None:
         tx_job = obj
 
@@ -163,17 +168,6 @@ class BasePrometheusExporter:
 
     async def handle_new_tx_job(self, obj: TxJob) -> None:
         METRICS_PUBSUB['txs_jobs_received'].inc()
-
-    async def handle_protocol_job_solved(self, obj: Dict[str, Union[MinerJob, StratumProtocol]]) -> None:
-        job = obj['job']
-        protocol = obj['protocol']
-
-        if isinstance(job, MinerTxJob):
-            METRICS_PUBSUB['txs_mining_time'].labels(
-                miner_type=protocol.miner_type,
-            ).observe(job.get_mining_time())
-
-            METRICS_PUBSUB['txs_waiting_time'].observe(job.get_waiting_time())
 
     async def handle_protocol_job_completed(self, protocol: StratumProtocol) -> None:
         METRICS_PUBSUB['miner_completed_jobs'].labels(
