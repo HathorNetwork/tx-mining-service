@@ -13,6 +13,7 @@ from hathorlib.exceptions import InvalidAddress
 from hathorlib.scripts import binary_to_int
 from hathorlib.utils import decode_address
 from structlog import get_logger
+from txstratum.pubsub import TxMiningEvents
 
 import txstratum.time
 from txstratum.jobs import MinerBlockJob
@@ -105,6 +106,11 @@ class StratumProtocol(JSONRPCProtocol):
 
             'mining.extranonce.subscribe': self.method_extranonce_subscribe,
         }
+
+    @property
+    def miner_type(self) -> List[str]:
+        """Returns the type of the connected miner."""
+        return self.miner_version.split('/')[0]
 
     def handle_result(self, result: Any, msgid: JSONRPCId) -> None:
         """Handle a result from JSONRPC."""
@@ -234,6 +240,8 @@ class StratumProtocol(JSONRPCProtocol):
         self.last_submit_at = now
         self.send_result(msgid, 'ok')
 
+        self.manager.pubsub.emit(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self)
+
         if isinstance(job, MinerBlockJob):
             assert self.started_current_block_at is not None
             dt = job.submitted_at - self.started_current_block_at
@@ -254,6 +262,11 @@ class StratumProtocol(JSONRPCProtocol):
                 self.blocks_found += 1
             else:
                 self.txs_solved += 1
+
+            self.manager.pubsub.emit(TxMiningEvents.PROTOCOL_JOB_SOLVED, {
+                'job': job,
+                'protocol': self,
+            })
 
         else:
             # If the solution is not valid, get a new job.

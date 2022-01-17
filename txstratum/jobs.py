@@ -217,6 +217,16 @@ class MinerTxJob(MinerJob):
         """Return job's weight (difficulty)."""
         return self._tx.weight
 
+    # TODO: unit tests
+    def get_mining_time(self) -> float:
+        """Return the time it took to mine the job."""
+        return self.tx_job.submitted_at - self.created_at
+
+    # TODO: unit tests
+    def get_waiting_time(self) -> float:
+        """Return the time it took to start mining the job."""
+        return self.created_at - self.tx_job.created_at
+
 
 class MinerBlockJob(MinerJob):
     """Block mining job."""

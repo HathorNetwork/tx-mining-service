@@ -95,7 +95,6 @@ class App:
         try:
             tx_bytes = bytes.fromhex(tx_hex)
             tx = tx_or_block_from_bytes(tx_bytes)
-            self.log.info('tx-received', tx_weight=tx.weight)
         except (ValueError, TxValidationError):
             self.log.debug('invalid-tx(1)', data=data)
             return web.json_response({'error': 'invalid-tx'}, status=400)

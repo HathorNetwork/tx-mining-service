@@ -13,6 +13,8 @@ import structlog
 from aiohttp import web
 from structlog import get_logger
 
+from txstratum.pubsub import PubSubManager
+
 logger = get_logger()
 
 
@@ -89,9 +91,11 @@ def execute(args: Namespace) -> None:
     # Set up all parts.
     loop = asyncio.get_event_loop()
 
+    pubsub = PubSubManager(loop)
     backend = HathorClient(args.backend)
     manager = TxMiningManager(
         backend=backend,
+        pubsub=pubsub,
         address=args.address,
     )
 
@@ -106,12 +110,12 @@ def execute(args: Namespace) -> None:
 
     if args.prometheus:
         from txstratum.prometheus import PrometheusExporter
-        metrics = PrometheusExporter(manager, args.prometheus)
+        metrics = PrometheusExporter(manager, pubsub, args.prometheus)
         metrics.start()
 
     if args.prometheus_port:
         from txstratum.prometheus import HttpPrometheusExporter
-        http_metrics = HttpPrometheusExporter(manager, args.prometheus_port)
+        http_metrics = HttpPrometheusExporter(manager, pubsub, args.prometheus_port)
         http_metrics.start()
         logger.info('Prometheus metrics server running at 0.0.0.0:{}...'.format(args.prometheus_port))
 
