@@ -53,15 +53,11 @@ class ManagerTestCase(unittest.TestCase):
         with open("tests/fixtures/expected_prometheus_metrics.prom", "r") as fp_expected:
             content_expected = fp_expected.read()
 
-            "ef".find
-
             # Removes lines with timestamp
             content_expected = list(filter(lambda x: x.find("_created") < 0, content_expected.splitlines()))
 
         with open(prometheus.filepath, 'r') as fp:
             content = fp.read()
-
-            print(content)
 
             # Removes lines with timestamp
             content = list(filter(lambda x: x.find("_created") < 0, content.splitlines()))

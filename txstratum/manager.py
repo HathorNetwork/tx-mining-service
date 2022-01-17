@@ -337,23 +337,13 @@ class TxMiningManager:
 
     def get_best_job(self, protocol: StratumProtocol) -> Optional[MinerJob]:
         """Return best job for a miner."""
-        if len(self.tx_queue) == 0:
-            return self.get_block_job()
+        if len(self.tx_queue) > 0:
+            job = self.tx_queue[0]
+            assert job.status not in JobStatus.get_after_mining_states()
+            if job.status != JobStatus.MINING:
+                job.status = JobStatus.MINING
+            return MinerTxJob(job)
 
-        return self.get_best_tx_job()
-
-    def get_best_tx_job(self) -> Optional[MinerJob]:
-        """Return best tx job."""
-        assert len(self.tx_queue) > 0
-
-        job = self.tx_queue[0]
-        assert job.status not in JobStatus.get_after_mining_states()
-        if job.status != JobStatus.MINING:
-            job.status = JobStatus.MINING
-        return MinerTxJob(job)
-
-    def get_block_job(self) -> Optional[MinerJob]:
-        """Return block job."""
         if self.block_template is None:
             self.log.error('Cannot generate MinerBlockJob because block_template is empty')
             return None
