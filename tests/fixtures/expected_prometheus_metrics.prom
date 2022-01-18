@@ -24,25 +24,29 @@ block_template_error 1.0
 txs_jobs_received_total 0.0
 # HELP txs_jobs_received_created Number of transactions received by the API
 # TYPE txs_jobs_received_created gauge
-txs_jobs_received_created 1.642441210968637e+09
+txs_jobs_received_created 1.642511672616624e+09
 # HELP txs_solved_total Number of solved transactions
 # TYPE txs_solved_total counter
+txs_solved_total{miner_address="abc123",miner_type="cpuminer"} 1.0
+# HELP txs_solved_created Number of solved transactions
+# TYPE txs_solved_created gauge
+txs_solved_created{miner_address="abc123",miner_type="cpuminer"} 1.6425116730388892e+09
 # HELP txs_solved_weight Txs solved histogram by tx weight
 # TYPE txs_solved_weight histogram
-txs_solved_weight_bucket{le="17.0"} 0.0
-txs_solved_weight_bucket{le="18.0"} 0.0
-txs_solved_weight_bucket{le="19.0"} 0.0
-txs_solved_weight_bucket{le="20.0"} 0.0
-txs_solved_weight_bucket{le="21.0"} 0.0
-txs_solved_weight_bucket{le="22.0"} 0.0
-txs_solved_weight_bucket{le="23.0"} 0.0
-txs_solved_weight_bucket{le="25.0"} 0.0
-txs_solved_weight_bucket{le="+Inf"} 0.0
-txs_solved_weight_count 0.0
-txs_solved_weight_sum 0.0
+txs_solved_weight_bucket{le="17.0",miner_type="cpuminer"} 0.0
+txs_solved_weight_bucket{le="18.0",miner_type="cpuminer"} 0.0
+txs_solved_weight_bucket{le="19.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="20.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="21.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="22.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="23.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="25.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="+Inf",miner_type="cpuminer"} 1.0
+txs_solved_weight_count{miner_type="cpuminer"} 1.0
+txs_solved_weight_sum{miner_type="cpuminer"} 18.65677715840935
 # HELP txs_solved_weight_created Txs solved histogram by tx weight
 # TYPE txs_solved_weight_created gauge
-txs_solved_weight_created 1.6424412109688265e+09
+txs_solved_weight_created{miner_type="cpuminer"} 1.6425116730389578e+09
 # HELP txs_timeout_weight Txs timeouts histogram by tx weight
 # TYPE txs_timeout_weight histogram
 txs_timeout_weight_bucket{le="17.0"} 0.0
@@ -58,9 +62,23 @@ txs_timeout_weight_count 0.0
 txs_timeout_weight_sum 0.0
 # HELP txs_timeout_weight_created Txs timeouts histogram by tx weight
 # TYPE txs_timeout_weight_created gauge
-txs_timeout_weight_created 1.6424412109690711e+09
+txs_timeout_weight_created 1.6425116726167388e+09
 # HELP txs_mining_time Txs mining time histogram
 # TYPE txs_mining_time histogram
+txs_mining_time_bucket{le="1.0",miner_type="cpuminer"} 0.0
+txs_mining_time_bucket{le="3.0",miner_type="cpuminer"} 0.0
+txs_mining_time_bucket{le="5.0",miner_type="cpuminer"} 0.0
+txs_mining_time_bucket{le="7.0",miner_type="cpuminer"} 0.0
+txs_mining_time_bucket{le="10.0",miner_type="cpuminer"} 1.0
+txs_mining_time_bucket{le="13.0",miner_type="cpuminer"} 1.0
+txs_mining_time_bucket{le="16.0",miner_type="cpuminer"} 1.0
+txs_mining_time_bucket{le="20.0",miner_type="cpuminer"} 1.0
+txs_mining_time_bucket{le="+Inf",miner_type="cpuminer"} 1.0
+txs_mining_time_count{miner_type="cpuminer"} 1.0
+txs_mining_time_sum{miner_type="cpuminer"} 10.0
+# HELP txs_mining_time_created Txs mining time histogram
+# TYPE txs_mining_time_created gauge
+txs_mining_time_created{miner_type="cpuminer"} 1.6425116730391047e+09
 # HELP txs_waiting_time Txs queue waiting time histogram
 # TYPE txs_waiting_time histogram
 txs_waiting_time_bucket{le="0.1"} 0.0
@@ -70,12 +88,12 @@ txs_waiting_time_bucket{le="1.0"} 0.0
 txs_waiting_time_bucket{le="2.0"} 0.0
 txs_waiting_time_bucket{le="3.0"} 0.0
 txs_waiting_time_bucket{le="5.0"} 0.0
-txs_waiting_time_bucket{le="10.0"} 0.0
-txs_waiting_time_bucket{le="+Inf"} 0.0
-txs_waiting_time_count 0.0
-txs_waiting_time_sum 0.0
+txs_waiting_time_bucket{le="10.0"} 1.0
+txs_waiting_time_bucket{le="+Inf"} 1.0
+txs_waiting_time_count 1.0
+txs_waiting_time_sum 10.0
 # HELP txs_waiting_time_created Txs queue waiting time histogram
 # TYPE txs_waiting_time_created gauge
-txs_waiting_time_created 1.6424412109693933e+09
+txs_waiting_time_created 1.6425116726168673e+09
 # HELP miner_completed_jobs_total Number of completed jobs by miner
 # TYPE miner_completed_jobs_total counter

@@ -47,7 +47,8 @@ METRICS_PUBSUB = {
     'txs_solved_weight': Histogram(
         'txs_solved_weight',
         'Txs solved histogram by tx weight',
-        buckets=(17, 18, 19, 20, 21, 22, 23, 25, float("inf"))
+        buckets=(17, 18, 19, 20, 21, 22, 23, 25, float("inf")),
+        labelnames=['miner_type']
     ),
     'txs_timeout_weight': Histogram(
         'txs_timeout_weight',
@@ -160,7 +161,9 @@ class BasePrometheusExporter:
             miner_address=protocol.miner_address_str
         ).inc()
 
-        METRICS_PUBSUB['txs_solved_weight'].observe(tx_job.get_weight())
+        METRICS_PUBSUB['txs_solved_weight'].labels(
+            miner_type=protocol.miner_type,
+        ).observe(tx_job.get_weight())
 
         METRICS_PUBSUB['txs_mining_time'].labels(
             miner_type=protocol.miner_type,
