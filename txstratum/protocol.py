@@ -272,7 +272,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         See: https://github.com/slushpool/stratumprotocol/blob/master/stratum-extensions.mediawiki
         """
-        self.log.debug('handle conaboutfigure', msgid=msgid, params=params)
+        self.log.debug('handle configure', msgid=msgid, params=params)
         exts, exts_params = params
         res: Dict[str, Any] = {ext: False for ext in exts}
 
