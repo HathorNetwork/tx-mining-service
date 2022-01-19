@@ -12,6 +12,7 @@ from structlog import get_logger
 import txstratum.time
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
 from txstratum.protocol import StratumProtocol
+from txstratum.pubsub import PubSubManager, TxMiningEvents
 from txstratum.utils import Periodic, calculate_expected_mining_time
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ class TxMiningManager:
     DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0  # seconds
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
-    def __init__(self, backend: 'HathorClient', address: Optional[str] = None):
+    def __init__(self, backend: 'HathorClient', pubsub: 'PubSubManager', address: Optional[str] = None):
         """Init TxMiningManager with backend."""
         if address is not None:
             # Validate address. If the address is invalid, it raises an InvalidAddress exception.
@@ -46,6 +47,7 @@ class TxMiningManager:
 
         self.log = logger.new()
         self.backend: 'HathorClient' = backend
+        self.pubsub: 'PubSubManager' = pubsub
         self.address = address
         self.started_at: float = 0
         self.tx_jobs: Dict[bytes, TxJob] = {}
@@ -167,6 +169,7 @@ class TxMiningManager:
                 asyncio.ensure_future(self.backend.push_tx_or_block(tx_bytes))
             self.log.info('TxJob solved', propagate=tx_job.propagate, tx_job=tx_job.to_dict())
             self.txs_solved += 1
+            self.pubsub.emit(TxMiningEvents.MANAGER_TX_SOLVED, {'tx_job': tx_job, 'protocol': protocol})
 
     def schedule_job_timeout(self, job: TxJob) -> None:
         """Schedule to have a TxJob marked as timeout."""
@@ -248,11 +251,13 @@ class TxMiningManager:
         job.expected_mining_time = calculate_expected_mining_time(miners_hashrate_ghs, job.get_weight())
 
         self.log.info('New TxJob', job=job.to_dict())
+        self.pubsub.emit(TxMiningEvents.MANAGER_NEW_TX_JOB, job)
 
         if job.add_parents:
             asyncio.ensure_future(self.add_parents(job))
         else:
             self.enqueue_tx_job(job)
+
         return True
 
     async def add_parents(self, job: TxJob) -> None:
@@ -285,6 +290,7 @@ class TxMiningManager:
             return
         self.log.info('TxJob timeout', job=job.to_dict())
         self.txs_timeout += 1
+        self.pubsub.emit(TxMiningEvents.MANAGER_TX_TIMEOUT, job)
         job.status = JobStatus.TIMEOUT
         try:
             self.tx_queue.remove(job)

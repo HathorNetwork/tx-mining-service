@@ -98,6 +98,22 @@ class HathorClientTest(HathorClient):
         return True
 
 
+def _get_ready_miner(manager: TxMiningManager, address: Optional[str] = None) -> StratumProtocol:
+    conn = StratumProtocol(manager)
+    conn._update_job_timestamp = False
+
+    transport = Mock()
+    conn.connection_made(transport=transport)
+
+    if address:
+        params = {'address': address}
+    else:
+        params = {}
+    conn.method_subscribe(params=params, msgid=None)
+    conn.method_authorize(params=None, msgid=None)
+    return conn
+
+
 class ManagerTestCase(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
@@ -107,7 +123,7 @@ class ManagerTestCase(unittest.TestCase):
 
         self.client = HathorClientTest(server_url='')
         self.loop.run_until_complete(self.client.start())
-        self.manager = TxMiningManager(backend=self.client, address=address)
+        self.manager = TxMiningManager(backend=self.client, pubsub=MagicMock(), address=address)
         self.loop.run_until_complete(self.manager.start())
         self.loop.run_until_complete(self.manager.wait_for_block_template())
         self.assertTrue(len(self.manager.block_template) > 0)
@@ -134,7 +150,7 @@ class ManagerTestCase(unittest.TestCase):
         for idx, (cause, invalid_address) in enumerate(invalid_addresses):
             with self.assertRaises(InvalidAddress):
                 print('Address #{}: {} ({})'.format(idx, cause, invalid_address))
-                TxMiningManager(backend=self.client, address=invalid_address)
+                TxMiningManager(backend=self.client, pubsub=None, address=invalid_address)
 
     def test_miner_connect_disconnect(self):
         conn = StratumProtocol(self.manager)
@@ -255,19 +271,7 @@ class ManagerTestCase(unittest.TestCase):
         transport.close.assert_not_called()
 
     def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
-        conn = StratumProtocol(self.manager)
-        conn._update_job_timestamp = False
-
-        transport = Mock()
-        conn.connection_made(transport=transport)
-
-        if address:
-            params = {'address': address}
-        else:
-            params = {}
-        conn.method_subscribe(params=params, msgid=None)
-        conn.method_authorize(params=None, msgid=None)
-        return conn
+        return _get_ready_miner(self.manager, address)
 
     def test_miner_invalid_address(self):
         conn = StratumProtocol(self.manager)
@@ -819,13 +823,16 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
 
         self.client = HathorClientTest(server_url='')
         self.loop.run_until_complete(self.client.start())
-        self.manager = TxMiningManager(backend=self.client, address=address)
+        self.manager = TxMiningManager(backend=self.client, pubsub=MagicMock(), address=address)
         self.loop.run_until_complete(self.manager.start())
         self.loop.run_until_complete(self.manager.wait_for_block_template())
         self.assertTrue(len(self.manager.block_template) > 0)
 
     def tearDown(self):
         self.clock.disable()
+
+    def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
+        return _get_ready_miner(self.manager, address)
 
     async def test_block_timestamp_update(self):
         job = self.manager.get_best_job(None)
@@ -915,3 +922,46 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         # Job2 timeouts.
         await self.advance(15)
         self.assertEqual(job2.status, JobStatus.TIMEOUT)
+
+    async def test_job_mining_time(self):
+        conn = self._get_ready_miner()
+
+        job1 = TxJob(TX1_DATA)
+        job2 = TxJob(TX2_DATA)
+        ret1 = self.manager.add_job(job1)
+        ret2 = self.manager.add_job(job2)
+        self.assertFalse(conn.current_job.is_block)
+        self.assertEqual(conn.current_job.tx_job, job1)
+        self.assertTrue(ret1)
+        self.assertTrue(ret2)
+
+        await self.advance(10)
+
+        # Submit solution to tx1
+        params = {
+            'job_id': conn.current_job.uuid.hex(),
+            'nonce': TX1_NONCE,
+        }
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, 'ok')
+
+        await self.advance(10)
+
+        # Submit solution to tx2
+        params = {
+            'job_id': conn.current_job.uuid.hex(),
+            'nonce': TX2_NONCE,
+        }
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, 'ok')
+
+        # Assertions
+        self.assertEqual(job1.get_mining_time(), 10)
+        self.assertEqual(job2.get_waiting_time(), 10)
+        self.assertEqual(job2.get_mining_time(), 10)
