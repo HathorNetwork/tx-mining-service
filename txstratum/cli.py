@@ -63,8 +63,6 @@ class RunService:
         """Gracefully shutdown the service."""
         logger.info('Gracefully shutting down...')
 
-        self.manager.refuse_new_jobs = True
-
         while len(self.manager.tx_queue) > 0:
             logger.info('Waiting for pending txs to finish...', txs_left=len(self.manager.tx_queue))
             await asyncio.sleep(2)
