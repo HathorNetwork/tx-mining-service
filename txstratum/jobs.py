@@ -158,6 +158,7 @@ class MinerJob(ABC):
     uuid: bytes
     is_block: bool
     share_weight: float
+    started_at: Optional[float]
     submitted_at: Optional[float]
 
     @abstractmethod
@@ -210,6 +211,7 @@ class MinerTxJob(MinerJob):
         self.is_block: bool = False
         self.share_weight: float = 0
         self.created_at: float = txstratum.time.time()
+        self.started_at: Optional[float] = None
         self.submitted_at: Optional[float] = None
 
     def get_object(self) -> BaseTransaction:
@@ -249,6 +251,7 @@ class MinerBlockJob(MinerJob):
         self.is_block: bool = True
         self.share_weight: float = 0
         self.created_at: float = txstratum.time.time()
+        self.started_at: Optional[float] = None
         self.submitted_at: Optional[float] = None
 
     def get_data(self) -> bytes:
