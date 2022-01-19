@@ -771,6 +771,43 @@ class ManagerTestCase(unittest.TestCase):
         self.assertEqual(job_data['clean'], True)
         self.assertEqual(job_data['data'], conn.current_job.get_header_without_nonce().hex())
 
+    def test_miner_block_submission_after_receiving_tx(self):
+        """
+        Simulates a miner that submits a block even after receiving a tx to mine.
+
+        This is something we observed in the wild.
+        """
+        # Motivated by the exception in https://github.com/HathorNetwork/tx-mining-service/pull/52
+
+        conn = self._get_ready_miner()
+        self.assertIsNotNone(conn.current_job)
+        self.assertTrue(conn.current_job.is_block)
+        self.assertEqual(0, conn.current_job.height)
+
+        block_job = conn.current_job
+
+        # Receive a tx to mine
+        job1 = TxJob(TX1_DATA)
+        ret1 = self.manager.add_job(job1)
+        self.assertFalse(conn.current_job.is_block)
+        self.assertEqual(conn.current_job.tx_job, job1)
+        self.assertTrue(ret1)
+
+        # Submit a block, even though we just received a tx to mine
+        params = {
+            'job_id': block_job.uuid.hex(),
+            'nonce': '00000000000000000000000000278a7e',
+        }
+
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, 'ok')
+
+        # Make sure the block submission was received
+        self.assertEqual(len(conn._submitted_work), 1)
+
 
 class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
     def setUp(self):
