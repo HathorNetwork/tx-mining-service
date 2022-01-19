@@ -22,8 +22,8 @@ class JobStatus(enum.Enum):
     """Job status."""
 
     PENDING = 'pending'
-    ENQUEUED = 'enqueued'
     GETTING_PARENTS = 'getting-parents'
+    ENQUEUED = 'enqueued'
     MINING = 'mining'
     DONE = 'done'
     FAILED = 'failed'
@@ -64,6 +64,7 @@ class TxJob:
         self.status: JobStatus = JobStatus.PENDING
         self.message: str = ''
         self.created_at: float = txstratum.time.time()
+        self.started_at: Optional[float] = None
         self.submitted_at: Optional[float] = None
         self.total_time: Optional[float] = None
         self.nonce: Optional[bytes] = None
@@ -106,6 +107,19 @@ class TxJob:
     def get_weight(self) -> float:
         """Return job's weight (difficulty)."""
         return self._tx.weight
+
+    def get_mining_time(self) -> float:
+        """Return the time it took to mine the job."""
+        assert self.submitted_at is not None
+        assert self.started_at is not None
+
+        return self.submitted_at - self.started_at
+
+    def get_waiting_time(self) -> float:
+        """Return the time it took to start mining the job."""
+        assert self.started_at is not None
+
+        return self.started_at - self.created_at
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dict with an overview of the job.
@@ -185,6 +199,11 @@ class MinerTxJob(MinerJob):
         """Init TxJob."""
         assert isinstance(tx_job, TxJob)
         self.tx_job: TxJob = tx_job
+
+        # The tx_job could have been included in other MinerTxJob before, so we
+        # don't want to overwrite it.
+        if not tx_job.started_at:
+            tx_job.started_at = txstratum.time.time()
 
         self._tx: BaseTransaction = tx_job.get_tx().clone()
 

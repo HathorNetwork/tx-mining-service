@@ -16,6 +16,7 @@ from structlog import get_logger
 
 import txstratum.time
 from txstratum.jobs import MinerBlockJob
+from txstratum.pubsub import TxMiningEvents
 from txstratum.utils import JSONRPCError, JSONRPCId, JSONRPCProtocol, MaxSizeOrderedDict, Periodic
 
 if TYPE_CHECKING:
@@ -64,6 +65,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.miner_id: str = str(uuid.uuid4())
         self.miner_address: Optional[bytes] = None
         self.miner_address_str: Optional[str] = None
+        self.miner_version: str = "unknown"
 
         self.jobs: MaxSizeOrderedDict[bytes, 'MinerJob'] = MaxSizeOrderedDict(max=self.MAX_JOBS)
         self.current_job: Optional['MinerJob'] = None
@@ -105,6 +107,19 @@ class StratumProtocol(JSONRPCProtocol):
 
             'mining.extranonce.subscribe': self.method_extranonce_subscribe,
         }
+
+    @property
+    def miner_type(self) -> str:
+        """Return the type of the connected miner."""
+        return self.miner_version.split('/')[0]
+
+    def handle_result(self, result: Any, msgid: JSONRPCId) -> None:
+        """Handle a result from JSONRPC."""
+        if msgid == 'client.get_version':
+            self.log.info('Miner version: {}'.format(result), miner_id=self.miner_id)
+            self.miner_version = result
+        else:
+            self.log.error('Cant handle result: {}'.format(result), miner_id=self.miner_id)
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Set things up after a new connection is made.
@@ -241,6 +256,8 @@ class StratumProtocol(JSONRPCProtocol):
         self.last_submit_at = now
         self.send_result(msgid, 'ok')
 
+        self.manager.pubsub.emit(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self)
+
         if isinstance(job, MinerBlockJob):
             assert job.started_at is not None
             dt = job.submitted_at - job.started_at
@@ -251,6 +268,9 @@ class StratumProtocol(JSONRPCProtocol):
             self.set_current_weight(self.current_weight + 1)
 
         if obj.verify_pow():
+            # We need to verify if the submited solution is valid, because we may
+            # have sent to the miner a job with weight below the weight needed
+            # to solve the block.
             self.manager.submit_solution(self, job, obj.get_struct_nonce())
             if obj.is_block:
                 self.blocks_found += 1
@@ -258,7 +278,7 @@ class StratumProtocol(JSONRPCProtocol):
                 self.txs_solved += 1
 
         else:
-            # Get a new job.
+            # If the solution is not valid, get a new job.
             self.manager.update_miner_job(self, clean=True)
 
     def method_configure(self, params: Any, msgid: JSONRPCId) -> None:
@@ -323,6 +343,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         return {
             'id': self.miner_id,
+            'version': self.miner_version,
             'hashrate_ghs': self.hashrate_ghs,
             'weight': self.current_weight,
             'miner_address': self.miner_address_str,
@@ -344,6 +365,8 @@ class StratumProtocol(JSONRPCProtocol):
 
     def start_if_ready(self) -> None:
         """Start mining if it is ready."""
+        self.send_request('client.get_version', None, 'client.get_version')
+
         if not self.is_ready():
             return
         if self.current_job is not None:

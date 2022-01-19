@@ -4,6 +4,8 @@ Copyright (c) Hathor Labs and its affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+from unittest.mock import MagicMock
+
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 
 import txstratum.time
@@ -69,7 +71,7 @@ def get_timestamp(tx_bytes: bytes) -> int:
 
 class AppTestCase(AioHTTPTestCase):
     async def get_application(self):
-        self.manager = TxMiningManager(backend=None, address=None)
+        self.manager = TxMiningManager(backend=None, pubsub=MagicMock(), address=None)
         self.myapp = App(self.manager)
         return self.myapp.app
 
