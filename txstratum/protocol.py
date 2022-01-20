@@ -132,7 +132,9 @@ class StratumProtocol(JSONRPCProtocol):
             self.log.warning('Received result for unknown message', msgid=msgid, result=result)
             return
 
-        message = self.messages_in_transit.pop(msgid)
+        assert type(msgid) is int
+
+        message = self.messages_in_transit.pop(cast(int, msgid))
 
         if message.method == 'client.get_version':
             self.log.info('Miner version: {}'.format(result), miner_id=self.miner_id)
@@ -140,8 +142,7 @@ class StratumProtocol(JSONRPCProtocol):
         else:
             self.log.error('Cant handle result: {}'.format(result), miner_id=self.miner_id, msgid=msgid)
 
-
-    def send_and_track_request(self, method: str, params: List[Any]) -> None:
+    def send_and_track_request(self, method: str, params: Any) -> None:
         """Send a request to the client and track it."""
         assert len(self.messages_in_transit) < 1000000
 
@@ -201,6 +202,7 @@ class StratumProtocol(JSONRPCProtocol):
             asyncio.ensure_future(self.messages_timeout_task.start())
 
     async def messages_timeout_job(self) -> None:
+        """Period task to check for messages that have timed out."""
         now = txstratum.time.time()
 
         should_delete = []
