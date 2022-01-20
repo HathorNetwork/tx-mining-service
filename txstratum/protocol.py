@@ -176,7 +176,6 @@ class StratumProtocol(JSONRPCProtocol):
 
     def method_subscribe(self, params: Any, msgid: JSONRPCId) -> None:
         """Handle subscribe request from JSONRPC."""
-
         if self.refuse_new_miners:
             self.send_error(msgid, self.SERVICE_SHUTTING_DOWN)
             self.log.info('Refused miner subscription because we are shutting down', address=self.miner_address_str)

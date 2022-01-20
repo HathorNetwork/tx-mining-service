@@ -110,7 +110,6 @@ class TxMiningManager:
 
     def shutdown(self) -> None:
         """Tasks to be executed before the service is shut down."""
-
         self.refuse_new_jobs = True
 
         for protocol in self.miners.values():
