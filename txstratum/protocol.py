@@ -120,6 +120,7 @@ class StratumProtocol(JSONRPCProtocol):
         }
 
         self.messages_in_transit: Dict[int, MessageInTransit] = {}
+        self.next_message_id = 1
 
     @property
     def miner_type(self) -> str:
@@ -142,15 +143,15 @@ class StratumProtocol(JSONRPCProtocol):
         else:
             self.log.error('Cant handle result: {}'.format(result), miner_id=self.miner_id, msgid=msgid)
 
+    def get_next_message_id(self):
+        """Return the next message id."""
+        msgid = self.next_message_id
+        self.next_message_id += 1
+        return msgid
+
     def send_and_track_request(self, method: str, params: Any) -> None:
         """Send a request to the client and track it."""
-        assert len(self.messages_in_transit) < 1000000
-
-        msgid = random.randint(1, 1000000)
-
-        # We need to make sure msg ids are unique
-        while msgid in self.messages_in_transit:
-            msgid = random.randint(1, 1000000)
+        msgid = self.get_next_message_id()
 
         self.messages_in_transit[msgid] = MessageInTransit(
             id=msgid,
