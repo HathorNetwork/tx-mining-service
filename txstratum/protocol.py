@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import asyncio
-import random
 import uuid
 from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
@@ -143,7 +142,7 @@ class StratumProtocol(JSONRPCProtocol):
         else:
             self.log.error('Cant handle result: {}'.format(result), miner_id=self.miner_id, msgid=msgid)
 
-    def get_next_message_id(self):
+    def get_next_message_id(self) -> int:
         """Return the next message id."""
         msgid = self.next_message_id
         self.next_message_id += 1
