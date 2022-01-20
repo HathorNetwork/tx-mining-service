@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import asyncio
+import random
 import uuid
 from math import log2
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, cast
@@ -36,6 +37,14 @@ class SubmittedWork(NamedTuple):
     dt: float
 
 
+class MessageInTransit(NamedTuple):
+    """Message that is waiting response from the client."""
+
+    id: int  # Some miners, like cgminer, only support integer ids
+    method: str
+    timeout: float
+
+
 class StratumProtocol(JSONRPCProtocol):
     """Implementation of Stratum Protocol.
 
@@ -46,11 +55,14 @@ class StratumProtocol(JSONRPCProtocol):
     ESTIMATOR_WINDOW_INTERVAL = 60 * 15  # in seconds, size of the window to use for estimating miner's hashrate
     TARGET_JOB_TIME = 15  # in seconds, adjust difficulty so jobs take this long
     JOB_UPDATE_INTERVAL = 2  # in seconds, to update the timestamp of the job
+    MESSAGES_TIMEOUT_INTERVAL = 5  # in seconds, the interval to clear timed out messages
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
     MAX_WEIGHT = 60.0  # maximum "difficulty" to assign to jobs
     INITIAL_WEIGHT = 30.0  # initial "difficulty" to assign to jobs, can raise or drop based on solvetimes
     MAX_JOBS = 1000  # maximum number of jobs to keep in memory
+
+    MESSAGE_TIMEOUT = 30  # in seconds, timeout for messages that are not answered
 
     INVALID_ADDRESS = JSONRPCError(22, 'Address to send mined funds is invalid')
     INVALID_SOLUTION = JSONRPCError(30, 'Invalid solution')
@@ -78,6 +90,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.started_at: float = 0.0
         self.estimator_task: Optional[Periodic] = None
         self.refresh_job_task: Optional[Periodic] = None
+        self.messages_timeout_task: Optional[Periodic] = None
 
         # For testing only.
         self._update_job_timestamp: bool = True
@@ -106,6 +119,8 @@ class StratumProtocol(JSONRPCProtocol):
             'mining.extranonce.subscribe': self.method_extranonce_subscribe,
         }
 
+        self.messages_in_transit: Dict[int, MessageInTransit] = {}
+
     @property
     def miner_type(self) -> str:
         """Return the type of the connected miner."""
@@ -113,11 +128,35 @@ class StratumProtocol(JSONRPCProtocol):
 
     def handle_result(self, result: Any, msgid: JSONRPCId) -> None:
         """Handle a result from JSONRPC."""
-        if msgid == 'client.get_version':
+        if msgid not in self.messages_in_transit:
+            self.log.warning('Received result for unknown message', msgid=msgid, result=result)
+            return
+
+        message = self.messages_in_transit.pop(msgid)
+
+        if message.method == 'client.get_version':
             self.log.info('Miner version: {}'.format(result), miner_id=self.miner_id)
             self.miner_version = result
         else:
-            self.log.error('Cant handle result: {}'.format(result), miner_id=self.miner_id)
+            self.log.error('Cant handle result: {}'.format(result), miner_id=self.miner_id, msgid=msgid)
+
+
+    def send_and_track_request(self, method: str, params: List[Any]) -> None:
+        """Send a request to the client and track it."""
+        assert len(self.messages_in_transit) < 1000000
+
+        msgid = random.randint(1, 1000000)
+
+        # We need to make sure msg ids are unique
+        while msgid in self.messages_in_transit:
+            msgid = random.randint(1, 1000000)
+
+        self.messages_in_transit[msgid] = MessageInTransit(
+            id=msgid,
+            method=method,
+            timeout=txstratum.time.time() + self.MESSAGE_TIMEOUT
+        )
+        self.send_request(method, params, msgid)
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Set things up after a new connection is made.
@@ -155,6 +194,24 @@ class StratumProtocol(JSONRPCProtocol):
             # Start refresh job periodic task.
             self.refresh_job_task = Periodic(self.refresh_job, self.JOB_UPDATE_INTERVAL)
             asyncio.ensure_future(self.refresh_job_task.start())
+
+        if self.messages_timeout_task is None:
+            # Start messages timeout periodic task.
+            self.messages_timeout_task = Periodic(self.messages_timeout_job, self.MESSAGES_TIMEOUT_INTERVAL)
+            asyncio.ensure_future(self.messages_timeout_task.start())
+
+    async def messages_timeout_job(self) -> None:
+        now = txstratum.time.time()
+
+        should_delete = []
+
+        for message in self.messages_in_transit.values():
+            if now > message.timeout:
+                should_delete.append(message.id)
+
+        for msgid in should_delete:
+            message = self.messages_in_transit.pop(msgid)
+            self.log.warning('Message timed out', msg=message)
 
     def method_extranonce_subscribe(self, params: Any, msgid: JSONRPCId) -> None:
         """Handle extra-nonce request from JSONRPC."""
@@ -349,7 +406,7 @@ class StratumProtocol(JSONRPCProtocol):
 
     def start_if_ready(self) -> None:
         """Start mining if it is ready."""
-        self.send_request('client.get_version', None, 'client.get_version')
+        self.send_and_track_request('client.get_version', None)
 
         if not self.is_ready():
             return
