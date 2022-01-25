@@ -12,19 +12,14 @@ from typing import List, Optional
 
 import structlog
 from aiohttp import web
-from structlog import get_logger
-from txstratum.filters import TXFilter
-
-from txstratum.manager import TxMiningManager
-from txstratum.pubsub import PubSubManager
-
 from hathorlib.client import HathorClient
+from structlog import get_logger
 
 from txstratum.api import App
-from txstratum.filters import FileFilter, TOIFilter
+from txstratum.filters import FileFilter, TOIFilter, TXFilter
 from txstratum.manager import TxMiningManager
+from txstratum.pubsub import PubSubManager
 from txstratum.toi_client import TOIAsyncClient
-
 
 logger = get_logger()
 
@@ -70,6 +65,7 @@ class RunService:
     tx_filters: List[TXFilter]
 
     def __init__(self, args: Namespace) -> None:
+        """Initialize the service."""
         self.args = args
 
         self.loop = asyncio.get_event_loop()
@@ -161,7 +157,9 @@ class RunService:
 
         self.loop.run_until_complete(self.backend.start())
         self.loop.run_until_complete(self.manager.start())
-        self.server = self.loop.run_until_complete(self.loop.create_server(self.manager, '0.0.0.0', self.args.stratum_port))
+        self.server = self.loop.run_until_complete(
+            self.loop.create_server(self.manager, '0.0.0.0', self.args.stratum_port)
+        )
         self.tx_filters: List[TXFilter] = []
         toiclient: Optional[TOIAsyncClient] = None
 
@@ -185,14 +183,19 @@ class RunService:
             toiclient = TOIAsyncClient(self.args.toi_url, self.args.toi_apikey)
             self.tx_filters.append(TOIFilter(toiclient, block=self.args.toi_fail_block))
 
-        api_app = App(self.manager, max_tx_weight=self.args.max_tx_weight, max_timestamp_delta=self.args.max_timestamp_delta,
-                      tx_timeout=self.args.tx_timeout, fix_invalid_timestamp=self.args.fix_invalid_timestamp,
-                      only_standard_script=not self.args.allow_non_standard_script, tx_filters=self.tx_filters)
-        logger.info('API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
-                    max_timestamp_delta=api_app.max_timestamp_delta,
-                    fix_invalid_timestamp=api_app.fix_invalid_timestamp,
-                    only_standard_script=api_app.only_standard_script,
-                    tx_filters=self.tx_filters)
+        api_app = App(
+            self.manager, max_tx_weight=self.args.max_tx_weight, max_timestamp_delta=self.args.max_timestamp_delta,
+            tx_timeout=self.args.tx_timeout, fix_invalid_timestamp=self.args.fix_invalid_timestamp,
+            only_standard_script=not self.args.allow_non_standard_script, tx_filters=self.tx_filters
+        )
+
+        logger.info(
+            'API Configuration', max_tx_weight=api_app.max_tx_weight, tx_timeout=api_app.tx_timeout,
+            max_timestamp_delta=api_app.max_timestamp_delta,
+            fix_invalid_timestamp=api_app.fix_invalid_timestamp,
+            only_standard_script=api_app.only_standard_script,
+            tx_filters=self.tx_filters
+        )
 
         web_runner = web.AppRunner(api_app.app, logger=logger)
         self.loop.run_until_complete(web_runner.setup())
@@ -208,6 +211,7 @@ class RunService:
         self.loop.run_forever()
 
     async def shutdown(self) -> None:
+        """Shutdown the service."""
         logger.info('Shutting down...')
         for tx_filter in self.tx_filters:
             await tx_filter.close()
