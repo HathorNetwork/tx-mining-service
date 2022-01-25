@@ -170,7 +170,7 @@ class RunService:
             logger.info('Running with testnet config file')
         self.loop.run_forever()
 
-    def handle_shutdown_signal(self, signal) -> None:
+    def handle_shutdown_signal(self, signal: str) -> None:
         """Handle shutdown signals."""
         logger.info(f'{signal} received.')
 
