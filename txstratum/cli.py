@@ -102,8 +102,6 @@ class RunService:
         """Handle SIGINT signal."""
         logger.info('SIGINT received.')
 
-        self.loop.create_task(self.graceful_shutdown())
-
         self.loop.create_task(self.shutdown())
 
     def register_signal_handlers(self) -> None:
@@ -213,6 +211,8 @@ class RunService:
     async def shutdown(self) -> None:
         """Shutdown the service."""
         logger.info('Shutting down...')
+        await self.graceful_shutdown()
+
         for tx_filter in self.tx_filters:
             await tx_filter.close()
 
