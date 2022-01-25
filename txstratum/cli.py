@@ -80,44 +80,6 @@ class RunService:
 
         self.configure_logging(args)
 
-    async def graceful_shutdown(self) -> None:
-        """Gracefully shutdown the service."""
-        logger.info('Gracefully shutting down...')
-
-        self.manager.refuse_new_jobs = True
-
-        while len(self.manager.tx_queue) > 0:
-            logger.info('Waiting for pending txs to finish...', txs_left=len(self.manager.tx_queue))
-            await asyncio.sleep(2)
-
-        self.manager.shutdown()
-
-    def sigterm_handler(self) -> None:
-        """Handle SIGTERM signal."""
-        logger.info('SIGTERM received.')
-
-        self.loop.create_task(self.graceful_shutdown())
-
-    def sigint_handler(self) -> None:
-        """Handle SIGINT signal."""
-        logger.info('SIGINT received.')
-
-        self.loop.create_task(self.shutdown())
-
-    def register_signal_handlers(self) -> None:
-        """Register signal handlers."""
-        import signal
-
-        logger.info('Registering signal handlers...')
-
-        sigterm = getattr(signal, 'SIGTERM', None)
-        if sigterm is not None:
-            self.loop.add_signal_handler(sigterm, self.sigterm_handler)
-
-        sigint = getattr(signal, 'SIGINT', None)
-        if sigint is not None:
-            self.loop.add_signal_handler(sigint, self.sigint_handler)
-
     def configure_logging(self, args: Namespace) -> None:
         """Configure logging."""
         from txstratum.utils import start_logging
@@ -208,10 +170,42 @@ class RunService:
             logger.info('Running with testnet config file')
         self.loop.run_forever()
 
-    async def shutdown(self) -> None:
+    def handle_shutdown_signal(self, signal) -> None:
+        """Handle shutdown signals."""
+        logger.info(f'{signal} received.')
+
+        self.loop.create_task(self._shutdown())
+
+    def register_signal_handlers(self) -> None:
+        """Register signal handlers."""
+        import signal
+
+        logger.info('Registering signal handlers...')
+
+        sigterm = getattr(signal, 'SIGTERM', None)
+        if sigterm is not None:
+            self.loop.add_signal_handler(sigterm, lambda: self.handle_shutdown_signal('SIGTERM'))
+
+        sigint = getattr(signal, 'SIGINT', None)
+        if sigint is not None:
+            self.loop.add_signal_handler(sigint, lambda: self.handle_shutdown_signal('SIGINT'))
+
+    async def _graceful_shutdown(self) -> None:
+        """Gracefully shutdown the service."""
+        logger.info('Gracefully shutting down...')
+
+        self.manager.refuse_new_jobs = True
+
+        while len(self.manager.tx_queue) > 0:
+            logger.info('Waiting for pending txs to finish...', txs_left=len(self.manager.tx_queue))
+            await asyncio.sleep(2)
+
+        self.manager.shutdown()
+
+    async def _shutdown(self) -> None:
         """Shutdown the service."""
         logger.info('Shutting down...')
-        await self.graceful_shutdown()
+        await self._graceful_shutdown()
 
         for tx_filter in self.tx_filters:
             await tx_filter.close()
