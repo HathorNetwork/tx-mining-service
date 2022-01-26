@@ -12,9 +12,11 @@ from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
 import asynctest  # type: ignore
+import pytest
 from hathorlib.client import BlockTemplate, HathorClient
 
 import txstratum.time
+from txstratum.exceptions import JobAlreadyExists
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
@@ -859,8 +861,8 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
 
         # When a similar job is submitted, manager declines it.
         job2 = TxJob(TX1_DATA)
-        ret2 = self.manager.add_job(job2)
-        self.assertFalse(ret2)
+        with pytest.raises(JobAlreadyExists):
+            self.manager.add_job(job2)
 
         # Wait until job1 is marked as timeout.
         await self.advance(15)

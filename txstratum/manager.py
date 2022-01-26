@@ -10,6 +10,7 @@ from hathorlib.utils import decode_address
 from structlog import get_logger
 
 import txstratum.time
+from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.pubsub import PubSubManager, TxMiningEvents
@@ -58,6 +59,7 @@ class TxMiningManager:
         self.block_template_updated_at: float = 0
         self.block_template: Optional['BlockTemplate'] = None
         self.block_template_update_interval = self.DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL
+        self.refuse_new_jobs = False
 
         # Statistics
         self.txs_solved: int = 0
@@ -67,7 +69,11 @@ class TxMiningManager:
 
     def __call__(self) -> StratumProtocol:
         """Return an instance of StratumProtocol for a new connection."""
-        return StratumProtocol(self)
+        protocol = StratumProtocol(self)
+
+        if self.refuse_new_jobs:
+            protocol.refuse_new_miners = True
+        return protocol
 
     async def start(self) -> None:
         """Start the manager."""
@@ -101,6 +107,14 @@ class TxMiningManager:
         """Remove a connection from the list of connections."""
         self.connections.pop(protocol.miner_id)
         self.miners.pop(protocol.miner_id, None)
+
+    def shutdown(self) -> None:
+        """Tasks to be executed before the service is shut down."""
+        self.refuse_new_jobs = True
+
+        for protocol in self.miners.values():
+            protocol.refuse_new_miners = True
+            protocol.ask_miner_to_reconnect()
 
     def mark_connection_as_ready(self, protocol: StratumProtocol) -> None:
         """Mark a miner as ready to mine. It is called by StratumProtocol."""
@@ -239,12 +253,16 @@ class TxMiningManager:
 
     def add_job(self, job: TxJob) -> bool:
         """Add new tx to be mined."""
+        if self.refuse_new_jobs:
+            # Will refuse new jobs only while shutting down the service
+            raise NewJobRefused
+
         if job.uuid in self.tx_jobs:
             prev_job = self.tx_jobs[job.uuid]
             if prev_job.status == JobStatus.TIMEOUT:
                 self._job_clean_up(prev_job)
             else:
-                return False
+                raise JobAlreadyExists
         self.tx_jobs[job.uuid] = job
 
         miners_hashrate_ghs = sum(x.hashrate_ghs for x in self.miners.values())
