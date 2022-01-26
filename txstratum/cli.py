@@ -68,6 +68,8 @@ class RunService:
         """Initialize the service."""
         self.args = args
 
+        self.configure_logging(args)
+
         self.loop = asyncio.get_event_loop()
 
         self.pubsub = PubSubManager(self.loop)
@@ -77,8 +79,6 @@ class RunService:
             pubsub=self.pubsub,
             address=args.address,
         )
-
-        self.configure_logging(args)
 
     def configure_logging(self, args: Namespace) -> None:
         """Configure logging."""
