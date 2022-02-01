@@ -16,6 +16,8 @@ class TxMiningEvents(Enum):
     MANAGER_TX_TIMEOUT = 'manager:tx_timeout'
     MANAGER_NEW_TX_JOB = 'manager:new_tx_job'
     PROTOCOL_JOB_COMPLETED = 'protocol:job_completed'
+    PROTOCOL_MINER_SUBSCRIBED = 'protocol:miner_subcribed'
+    PROTOCOL_MINER_DISCONNECTED = 'protocol:miner_disconnected'
 
 
 class PubSubManager():
