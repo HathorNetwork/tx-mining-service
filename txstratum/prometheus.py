@@ -71,6 +71,11 @@ METRICS_PUBSUB = {
         'Number of completed jobs by miner',
         labelnames=['miner_type', 'miner_address'],
     ),
+    'miner_up': Gauge(
+        'miner_up',
+        'Indicates that a miner is up',
+        labelnames=['miner_address'],
+    )
 }
 
 
@@ -137,6 +142,8 @@ class BasePrometheusExporter:
         self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_TIMEOUT, self._handle_tx_timeout)
         self.pubsub.subscribe(TxMiningEvents.MANAGER_NEW_TX_JOB, self._handle_new_tx_job)
         self.pubsub.subscribe(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self._handle_protocol_job_completed)
+        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, self._handle_protocol_miner_subscribed)
+        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, self._handle_protocol_miner_disconnected)
 
     async def update_metrics(self) -> None:
         """Update metric_gauges dict with new data from metrics."""
@@ -184,6 +191,16 @@ class BasePrometheusExporter:
             miner_type=protocol.miner_type,
             miner_address=protocol.miner_address_str
         ).inc()
+
+    async def _handle_protocol_miner_subscribed(self, protocol: StratumProtocol) -> None:
+        METRICS_PUBSUB['miner_up'].labels(
+            miner_address=protocol.miner_address_str
+        ).set(1)
+
+    async def _handle_protocol_miner_disconnected(self, protocol: StratumProtocol) -> None:
+        METRICS_PUBSUB['miner_up'].labels(
+            miner_address=protocol.miner_address_str
+        ).set(0)
 
 
 class PrometheusExporter(BasePrometheusExporter):

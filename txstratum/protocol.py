@@ -179,6 +179,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.log.debug('connection lost', exc=exc)
         if self._subscribed:
             self.log.info('Miner exited')
+            self.manager.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, self)
         assert self.miner_id is not None
         self.manager.remove_connection(self)
         if self.estimator_task:
@@ -259,6 +260,7 @@ class StratumProtocol(JSONRPCProtocol):
         self._subscribed = True
         self.send_result('ok', msgid)
         self.log.info('Miner subscribed', address=self.miner_address_str)
+        self.manager.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, self)
         self.start_if_ready()
 
     def method_authorize(self, params: Any, msgid: JSONRPCId) -> None:
