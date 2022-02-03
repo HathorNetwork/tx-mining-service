@@ -97,3 +97,5 @@ txs_waiting_time_sum 10.0
 txs_waiting_time_created 1.6425116726168673e+09
 # HELP miner_completed_jobs_total Number of completed jobs by miner
 # TYPE miner_completed_jobs_total counter
+# HELP miner_up Indicates that a miner is up
+# TYPE miner_up gauge

@@ -9,6 +9,8 @@ on:
   pull_request:
     types:
     - synchronize
+    - opened
+    - reopened
 jobs:
   test:
     name: python-${{ matrix.python }} (${{ matrix.os }})
