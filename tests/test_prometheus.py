@@ -17,28 +17,28 @@ from txstratum.protocol import StratumProtocol
 from txstratum.pubsub import PubSubManager, TxMiningEvents
 
 TX1_DATA = bytes.fromhex(
-    '0001000102000000000000089c0d40a9b1edfb499bc624833fde87ae459d495000393f4aaa00006'
-    'a473045022100c407d5e8f411f9ae582ebd7acbfcb6ea6170332709fb69acaa34c1b426f1d8f502'
-    '2003847963768eca9bcdf46e758319fb2699fd28ab657d00f54bef46c37a90405e2103755f2920f'
-    'f7dc32dc5414cea1cf9e078347f40894caf0c03637d083dbb261c5c000003e800001976a914a04c'
-    '9e2a0291f53c618fdad2ecb37748efb0eeeb88ac0000151800001976a914545f1156a3b00df622b'
-    '1d92968c21b962e9d7aa588ac4032a8228c4020c35ed18547020000000047c9881d2bf348d5ffd6'
-    'ce8398d6bc5d17b3bea75a53c15b7480be950000006ed5794bf69ebe7d7d75e7a0024d98acb85cb'
-    '9c101b59b8b6073e8667c84e2ee77'
+    "0001000102000000000000089c0d40a9b1edfb499bc624833fde87ae459d495000393f4aaa00006"
+    "a473045022100c407d5e8f411f9ae582ebd7acbfcb6ea6170332709fb69acaa34c1b426f1d8f502"
+    "2003847963768eca9bcdf46e758319fb2699fd28ab657d00f54bef46c37a90405e2103755f2920f"
+    "f7dc32dc5414cea1cf9e078347f40894caf0c03637d083dbb261c5c000003e800001976a914a04c"
+    "9e2a0291f53c618fdad2ecb37748efb0eeeb88ac0000151800001976a914545f1156a3b00df622b"
+    "1d92968c21b962e9d7aa588ac4032a8228c4020c35ed18547020000000047c9881d2bf348d5ffd6"
+    "ce8398d6bc5d17b3bea75a53c15b7480be950000006ed5794bf69ebe7d7d75e7a0024d98acb85cb"
+    "9c101b59b8b6073e8667c84e2ee77"
 )
 
 
-class TxMiningManagerMock():
+class TxMiningManagerMock:
     """Mock TxMiningManager."""
 
     def __init__(self):
-        self.miners = ['miner1', 'miner2']
+        self.miners = ["miner1", "miner2"]
         self.block_template_error = 1
         self.txs_timeout = 2
         self.blocks_found = 3
         self.txs_solved = 4
         self.uptime = 1234
-        self.tx_queue = ['tx1', 'tx2']
+        self.tx_queue = ["tx1", "tx2"]
 
     def get_total_hashrate_ghs(self):
         return 1.23
@@ -63,7 +63,7 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
 
         self.loop.create_task(_fn())
 
-        while getattr(self, 'ran_all', False) is False:
+        while getattr(self, "ran_all", False) is False:
             await asyncio.sleep(0.1)
 
         self.ran_all = False
@@ -85,10 +85,10 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
         txJob.submitted_at = 100
 
         protocol = StratumProtocol(self.manager)
-        protocol.miner_address_str = 'abc123'
-        protocol.miner_version = 'cpuminer/1.0'
+        protocol.miner_address_str = "abc123"
+        protocol.miner_version = "cpuminer/1.0"
 
-        self.pubsub.emit(TxMiningEvents.MANAGER_TX_SOLVED, {'tx_job': txJob, 'protocol': protocol})
+        self.pubsub.emit(TxMiningEvents.MANAGER_TX_SOLVED, {"tx_job": txJob, "protocol": protocol})
         await self._run_all_pending_events()
 
         await prometheus.update_metrics()
@@ -100,7 +100,7 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
             # Removes lines with timestamp
             content_expected = list(filter(lambda x: x.find("_created") < 0, content_expected.splitlines()))
 
-        with open(prometheus.filepath, 'r') as fp:
+        with open(prometheus.filepath, "r") as fp:
             content = fp.read()
 
             # Removes lines with timestamp

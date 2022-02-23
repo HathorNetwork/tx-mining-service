@@ -45,7 +45,7 @@ mypy-tests: $(py_tests)
 
 .PHONY: flake8
 flake8: $(py_sources) $(py_tests)
-	flake8 $^
+	flake8 --max-line-length=121 $^
 
 .PHONY: isort-check
 isort-check: $(py_sources) $(py_tests)
@@ -57,16 +57,15 @@ check: flake8 isort-check mypy
 # formatting:
 
 .PHONY: fmt
-fmt: yapf isort
+fmt: black isort
 
-.PHONY: yapf
-yapf: $(py_sources) $(py_tests)
-	echo "Skipping yapf because it's conflicting with flake8"
-#	yapf -rip $^ -e \*_pb2.py,\*_pb2_grpc.py
+.PHONY: black
+black:
+	black .
 
 .PHONY: isort
 isort: $(py_sources) $(py_tests)
-	isort -ac -rc $^
+	isort --ac $^
 
 # cleaning:
 

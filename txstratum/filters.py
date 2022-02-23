@@ -24,7 +24,7 @@ class TXFilter(ABC):
     """Base class for tx filters."""
 
     @abstractmethod
-    async def check_tx(self, tx: 'BaseTransaction', data: Any) -> bool:
+    async def check_tx(self, tx: "BaseTransaction", data: Any) -> bool:
         """Return if the tx should be blocked."""
         raise NotImplementedError
 
@@ -44,25 +44,25 @@ class FileFilter(TXFilter):
         self.banned_addresses = banned_addresses
 
     @classmethod
-    def load_from_files(cls, tx_filename: Optional[str], address_filename: Optional[str]) -> 'FileFilter':
+    def load_from_files(cls, tx_filename: Optional[str], address_filename: Optional[str]) -> "FileFilter":
         """Load banned tx and addresses from files and return an instance of FileFilter."""
         file_filter = cls()
         if tx_filename:
-            with open(tx_filename, 'r') as fp:
+            with open(tx_filename, "r") as fp:
                 for line in fp:
                     line = line.strip()
                     if not line:
                         continue
-                    file_filter.log.info('Added to banned tx ids', txid=line)
+                    file_filter.log.info("Added to banned tx ids", txid=line)
                     file_filter.banned_tx_ids.add(bytes.fromhex(line))
 
         if address_filename:
-            with open(address_filename, 'r') as fp:
+            with open(address_filename, "r") as fp:
                 for line in fp:
                     line = line.strip()
                     if not line:
                         continue
-                    file_filter.log.info('Added to banned addresses', txid=line)
+                    file_filter.log.info("Added to banned addresses", txid=line)
                     file_filter.banned_addresses.add(line)
         return file_filter
 
@@ -70,21 +70,21 @@ class FileFilter(TXFilter):
         """Nothing to do here."""
         return
 
-    async def check_tx(self, tx: 'BaseTransaction', data: Any) -> bool:
+    async def check_tx(self, tx: "BaseTransaction", data: Any) -> bool:
         """Return if the tx should be blocked."""
         if len(self.banned_tx_ids):
             for txin in tx.inputs:
                 if txin.tx_id in self.banned_tx_ids:
-                    self.log.info('banned-tx', data=data)
+                    self.log.info("banned-tx", data=data)
                     return True
 
         if len(self.banned_addresses):
             for txout in tx.outputs:
                 p2pkh = P2PKH.parse_script(txout.script)
                 if p2pkh is not None:
-                    self.log.info('p2pkh.address', address=p2pkh.address)
+                    self.log.info("p2pkh.address", address=p2pkh.address)
                     if p2pkh.address in self.banned_addresses:
-                        self.log.info('banned-address', data=data)
+                        self.log.info("banned-address", data=data)
                         return True
         return False
 
@@ -92,7 +92,7 @@ class FileFilter(TXFilter):
 class TOIFilter(TXFilter):
     """Filter tx based on the toi service."""
 
-    def __init__(self, client: 'TOIAsyncClient', block: bool = False) -> None:
+    def __init__(self, client: "TOIAsyncClient", block: bool = False) -> None:
         """Init filter."""
         self.client = client
         self.block = block
@@ -102,7 +102,7 @@ class TOIFilter(TXFilter):
         """Close toi client."""
         await self.client.close()
 
-    async def check_tx(self, tx: 'BaseTransaction', data: Any) -> bool:
+    async def check_tx(self, tx: "BaseTransaction", data: Any) -> bool:
         """Return if the tx should be blocked."""
         txs: Set[str] = set()
         addrs: Set[str] = set()
@@ -112,13 +112,13 @@ class TOIFilter(TXFilter):
         for txout in tx.outputs:
             p2pkh = P2PKH.parse_script(txout.script)
             if p2pkh is not None:
-                self.log.debug('p2pkh.address', address=p2pkh.address)
+                self.log.debug("p2pkh.address", address=p2pkh.address)
                 addrs.add(p2pkh.address)
 
         try:
             resp = await self.client.check_blacklist(tx_ids=list(txs), addresses=list(addrs))
             if resp.blacklisted:
-                self.log.info('banned', data=data, issues=resp.issues)
+                self.log.info("banned", data=data, issues=resp.issues)
             return resp.blacklisted
         except TOIError as ex:
             # TOI Service error

@@ -24,58 +24,56 @@ if TYPE_CHECKING:
 # Key: str = name of the metric
 # Value: Tuple[str, Callable[[TxMiningManager], Any]] = method that collects the metric
 METRIC_INFO: Dict[str, str] = {
-    'miners_count': 'Number of connected miners',
-    'total_hashrate_ghs': 'Hashrate (Gh/s)',
-    'txs_timeout': 'Number of timeouts when solving transactions',
-    'blocks_found': 'Number of blocks found',
-    'uptime': 'Service uptime',
-    'tx_queue': 'Number of transactions in the queue',
-    'block_template_error': 'Number of errors updating block template',
+    "miners_count": "Number of connected miners",
+    "total_hashrate_ghs": "Hashrate (Gh/s)",
+    "txs_timeout": "Number of timeouts when solving transactions",
+    "blocks_found": "Number of blocks found",
+    "uptime": "Service uptime",
+    "tx_queue": "Number of transactions in the queue",
+    "block_template_error": "Number of errors updating block template",
 }
 
 # Metrics that we update through pubsub events
 METRICS_PUBSUB = {
-    'txs_jobs_received': Counter(
-        'txs_jobs_received',
-        'Number of transactions received by the API',
+    "txs_jobs_received": Counter(
+        "txs_jobs_received",
+        "Number of transactions received by the API",
     ),
-    'txs_solved': Counter(
-        'txs_solved',
-        'Number of solved transactions',
-        labelnames=['miner_type', 'miner_address'],
+    "txs_solved": Counter(
+        "txs_solved",
+        "Number of solved transactions",
+        labelnames=["miner_type", "miner_address"],
     ),
-    'txs_solved_weight': Histogram(
-        'txs_solved_weight',
-        'Txs solved histogram by tx weight',
+    "txs_solved_weight": Histogram(
+        "txs_solved_weight",
+        "Txs solved histogram by tx weight",
         buckets=(17, 18, 19, 20, 21, 22, 23, 25, float("inf")),
-        labelnames=['miner_type']
+        labelnames=["miner_type"],
     ),
-    'txs_timeout_weight': Histogram(
-        'txs_timeout_weight',
-        'Txs timeouts histogram by tx weight',
-        buckets=(17, 18, 19, 20, 21, 22, 23, 25, float("inf"))
+    "txs_timeout_weight": Histogram(
+        "txs_timeout_weight",
+        "Txs timeouts histogram by tx weight",
+        buckets=(17, 18, 19, 20, 21, 22, 23, 25, float("inf")),
     ),
-    'txs_mining_time': Histogram(
-        'txs_mining_time',
-        'Txs mining time histogram',
+    "txs_mining_time": Histogram(
+        "txs_mining_time",
+        "Txs mining time histogram",
         buckets=(1, 3, 5, 7, 10, 13, 16, 20, float("inf")),
-        labelnames=['miner_type'],
+        labelnames=["miner_type"],
     ),
-    'txs_waiting_time': Histogram(
-        'txs_waiting_time',
-        'Txs queue waiting time histogram',
-        buckets=(.1, .25, .5, 1, 2, 3, 5, 10, float("inf"))
+    "txs_waiting_time": Histogram(
+        "txs_waiting_time", "Txs queue waiting time histogram", buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, float("inf"))
     ),
-    'miner_completed_jobs': Counter(
-        'miner_completed_jobs',
-        'Number of completed jobs by miner',
-        labelnames=['miner_type', 'miner_address'],
+    "miner_completed_jobs": Counter(
+        "miner_completed_jobs",
+        "Number of completed jobs by miner",
+        labelnames=["miner_type", "miner_address"],
     ),
-    'miner_up': Gauge(
-        'miner_up',
-        'Indicates that a miner is up',
-        labelnames=['miner_address'],
-    )
+    "miner_up": Gauge(
+        "miner_up",
+        "Indicates that a miner is up",
+        labelnames=["miner_address"],
+    ),
 }
 
 
@@ -91,7 +89,7 @@ class MetricData(NamedTuple):
     block_template_error: int
 
 
-def collect_metrics(manager: 'TxMiningManager') -> MetricData:
+def collect_metrics(manager: "TxMiningManager") -> MetricData:
     """Collect data from TxMiningManager."""
     return MetricData(
         miners_count=len(manager.miners),
@@ -107,7 +105,7 @@ def collect_metrics(manager: 'TxMiningManager') -> MetricData:
 class BasePrometheusExporter:
     """Base class for prometheus exporters."""
 
-    def __init__(self, manager: 'TxMiningManager', pubsub: 'PubSubManager') -> None:
+    def __init__(self, manager: "TxMiningManager", pubsub: "PubSubManager") -> None:
         """Init BasePrometheusExporter.
 
         :param manager: Manager where the metrics will be collected from
@@ -160,58 +158,48 @@ class BasePrometheusExporter:
         asyncio.ensure_future(self.update_metrics_task.stop())
 
     async def _handle_tx_solved(self, obj: Dict[str, Union[TxJob, StratumProtocol]]) -> None:
-        tx_job = cast(TxJob, obj['tx_job'])
-        protocol = cast(StratumProtocol, obj['protocol'])
+        tx_job = cast(TxJob, obj["tx_job"])
+        protocol = cast(StratumProtocol, obj["protocol"])
 
-        METRICS_PUBSUB['txs_solved'].labels(
-            miner_type=protocol.miner_type,
-            miner_address=protocol.miner_address_str
+        METRICS_PUBSUB["txs_solved"].labels(
+            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str
         ).inc()
 
-        METRICS_PUBSUB['txs_solved_weight'].labels(
+        METRICS_PUBSUB["txs_solved_weight"].labels(
             miner_type=protocol.miner_type,
         ).observe(tx_job.get_weight())
 
-        METRICS_PUBSUB['txs_mining_time'].labels(
+        METRICS_PUBSUB["txs_mining_time"].labels(
             miner_type=protocol.miner_type,
         ).observe(tx_job.get_mining_time())
 
-        METRICS_PUBSUB['txs_waiting_time'].observe(tx_job.get_waiting_time())
+        METRICS_PUBSUB["txs_waiting_time"].observe(tx_job.get_waiting_time())
 
     async def _handle_tx_timeout(self, obj: TxJob) -> None:
         tx_job = obj
 
-        METRICS_PUBSUB['txs_timeout_weight'].observe(tx_job.get_weight())
+        METRICS_PUBSUB["txs_timeout_weight"].observe(tx_job.get_weight())
 
     async def _handle_new_tx_job(self, obj: TxJob) -> None:
-        METRICS_PUBSUB['txs_jobs_received'].inc()
+        METRICS_PUBSUB["txs_jobs_received"].inc()
 
     async def _handle_protocol_job_completed(self, protocol: StratumProtocol) -> None:
-        METRICS_PUBSUB['miner_completed_jobs'].labels(
-            miner_type=protocol.miner_type,
-            miner_address=protocol.miner_address_str
+        METRICS_PUBSUB["miner_completed_jobs"].labels(
+            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str
         ).inc()
 
     async def _handle_protocol_miner_subscribed(self, protocol: StratumProtocol) -> None:
-        METRICS_PUBSUB['miner_up'].labels(
-            miner_address=protocol.miner_address_str
-        ).set(1)
+        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(1)
 
     async def _handle_protocol_miner_disconnected(self, protocol: StratumProtocol) -> None:
-        METRICS_PUBSUB['miner_up'].labels(
-            miner_address=protocol.miner_address_str
-        ).set(0)
+        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(0)
 
 
 class PrometheusExporter(BasePrometheusExporter):
     """Class that sends hathor metrics to a node exporter that will be read by Prometheus."""
 
     def __init__(
-        self,
-        manager: 'TxMiningManager',
-        pubsub: 'PubSubManager',
-        path: str,
-        filename: str = 'tx-mining-service.prom'
+        self, manager: "TxMiningManager", pubsub: "PubSubManager", path: str, filename: str = "tx-mining-service.prom"
     ):
         """Init PrometheusExporter.
 
@@ -237,7 +225,7 @@ class PrometheusExporter(BasePrometheusExporter):
 class HttpPrometheusExporter(BasePrometheusExporter):
     """Class that exposes metrics in a http endpoint."""
 
-    def __init__(self, manager: 'TxMiningManager', pubsub: 'PubSubManager', port: int):
+    def __init__(self, manager: "TxMiningManager", pubsub: "PubSubManager", port: int):
         """Init HttpPrometheusExporter.
 
         :param manager: Manager where the metrics will be collected from
