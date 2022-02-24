@@ -45,7 +45,7 @@ mypy-tests: $(py_tests)
 
 .PHONY: flake8
 flake8: $(py_sources) $(py_tests)
-	flake8 --max-line-length=121 $^
+	flake8 $^
 
 .PHONY: isort-check
 isort-check: $(py_sources) $(py_tests)
