@@ -8,7 +8,19 @@ import traceback
 from asyncio import Future
 from collections import OrderedDict, namedtuple
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Generic, Optional, Tuple, TypeVar, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Generic,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from structlog import get_logger
 
@@ -33,11 +45,13 @@ class Periodic:
     - https://stackoverflow.com/a/55505152/947511
     """
 
-    def __init__(self,
-                 afunc: Callable[..., Awaitable[None]],
-                 interval: Union[int, float],
-                 args: Tuple[Any, ...] = (),
-                 kwargs: Dict[str, Any] = {}):
+    def __init__(
+        self,
+        afunc: Callable[..., Awaitable[None]],
+        interval: Union[int, float],
+        args: Tuple[Any, ...] = (),
+        kwargs: Dict[str, Any] = {},
+    ):
         """Create Periodic instance from async function.
 
         Params:
@@ -78,7 +92,7 @@ class Periodic:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception('periodic call failed')
+                logger.exception("periodic call failed")
                 break
 
 
@@ -88,8 +102,8 @@ class LineProtocol(asyncio.Protocol):
     Adapted from: https://github.com/twisted/twisted/blob/trunk/src/twisted/protocols/basic.py#L421
     """
 
-    _buffer = b''
-    delimiter = b'\n'
+    _buffer = b""
+    delimiter = b"\n"
     MAX_LENGTH = 16384
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -124,7 +138,7 @@ class LineProtocol(asyncio.Protocol):
         self.transport.close()
 
 
-JSONRPCError = namedtuple('JSONRPCError', 'code message')
+JSONRPCError = namedtuple("JSONRPCError", "code message")
 JSONRPCId = Optional[Union[int, str]]
 
 
@@ -134,11 +148,11 @@ class JSONRPCProtocol(LineProtocol):
     Specification: https://www.jsonrpc.org/specification
     """
 
-    PARSE_ERROR = JSONRPCError(-32700, 'Parse error')
-    INVALID_REQUEST = JSONRPCError(-32600, 'Invalid Request')
-    METHOD_NOT_FOUND = JSONRPCError(-32601, 'Method not found')
-    INVALID_PARAMS = JSONRPCError(-32602, 'Invalid params')
-    INTERNAL_ERROR = JSONRPCError(-32603, 'Internal error')
+    PARSE_ERROR = JSONRPCError(-32700, "Parse error")
+    INVALID_REQUEST = JSONRPCError(-32600, "Invalid Request")
+    METHOD_NOT_FOUND = JSONRPCError(-32601, "Method not found")
+    INVALID_PARAMS = JSONRPCError(-32602, "Invalid params")
+    INTERNAL_ERROR = JSONRPCError(-32603, "Internal error")
 
     # List of available methods by name.
     supported_methods: Dict[str, Callable[[Any, JSONRPCId], None]] = {}
@@ -148,10 +162,12 @@ class JSONRPCProtocol(LineProtocol):
         try:
             data = json.loads(line)
         except ValueError:
-            return self.send_error(None, self.PARSE_ERROR, data='cannot decode json')
+            return self.send_error(None, self.PARSE_ERROR, data="cannot decode json")
         if not isinstance(data, dict):
             # This implementation does not support batch.
-            return self.send_error(None, self.INVALID_REQUEST, data='json must be an object')
+            return self.send_error(
+                None, self.INVALID_REQUEST, data="json must be an object"
+            )
         self.json_received(data)
 
     def json_received(self, data: Dict[Any, Any]) -> None:
@@ -160,28 +176,32 @@ class JSONRPCProtocol(LineProtocol):
             return
         if self.try_as_response(data):
             return
-        return self.send_error(None, self.INVALID_REQUEST, data={
-            'message': data,
-            'error': 'Could not identify message as request, result or error.'
-        })
+        return self.send_error(
+            None,
+            self.INVALID_REQUEST,
+            data={
+                "message": data,
+                "error": "Could not identify message as request, result or error.",
+            },
+        )
 
     def try_as_request(self, data: Dict[Any, Any]) -> bool:
         """Try to parse `data` as a request."""
-        if 'method' not in data:
+        if "method" not in data:
             return False
-        method = data['method']  # required
-        msgid = data.get('id')
-        params = data.get('params')
+        method = data["method"]  # required
+        msgid = data.get("id")
+        params = data.get("params")
         self.handle_request(method, params, msgid)
         return True
 
     def try_as_response(self, data: Dict[Any, Any]) -> bool:
         """Try to parse `data` as a response."""
-        if 'result' not in data and 'error' not in data:
+        if "result" not in data and "error" not in data:
             return False
-        msgid = data.get('id')
-        result = data.get('result')
-        error = data.get('error')
+        msgid = data.get("id")
+        result = data.get("result")
+        error = data.get("error")
         if result is not None and error is not None:
             # Cannot have both result and error at the same time.
             return False
@@ -189,11 +209,11 @@ class JSONRPCProtocol(LineProtocol):
             self.handle_result(result, msgid)
             return True
         elif error:
-            if 'code' not in error:
+            if "code" not in error:
                 return False
-            code = error['code']
-            message = error.get('message')
-            errdata = error.get('data')
+            code = error["code"]
+            message = error.get("message")
+            errdata = error.get("data")
             self.handle_error(code, message, errdata, msgid)
             return True
         return False
@@ -209,8 +229,8 @@ class JSONRPCProtocol(LineProtocol):
             return
 
         data = {
-            'method': method,
-            'supported_methods': list(self.supported_methods.keys())
+            "method": method,
+            "supported_methods": list(self.supported_methods.keys()),
         }
         self.send_error(msgid, self.METHOD_NOT_FOUND, data=data)
 
@@ -218,44 +238,48 @@ class JSONRPCProtocol(LineProtocol):
         """Handle a result from JSONRPC."""
         raise NotImplementedError
 
-    def handle_error(self, code: int, message: str, data: Any, msgid: JSONRPCId) -> None:
+    def handle_error(
+        self, code: int, message: str, data: Any, msgid: JSONRPCId
+    ) -> None:
         """Handle an error from JSONRPC."""
         raise NotImplementedError
 
     def send_request(self, method: str, params: Any, msgid: JSONRPCId) -> None:
         """Send a request to JSONRPC."""
         ret = {
-            'id': msgid,
-            'method': method,
+            "id": msgid,
+            "method": method,
         }
         if params:
-            ret['params'] = params
-        self.transport.writelines([json.dumps(ret).encode('utf-8'), b'\n'])
+            ret["params"] = params
+        self.transport.writelines([json.dumps(ret).encode("utf-8"), b"\n"])
 
     def send_result(self, msgid: JSONRPCId, result: Any) -> None:
         """Send a result to JSONRPC."""
         ret = {
-            'id': msgid,
-            'result': result,
+            "id": msgid,
+            "result": result,
         }
-        self.transport.writelines([json.dumps(ret).encode('utf-8'), b'\n'])
+        self.transport.writelines([json.dumps(ret).encode("utf-8"), b"\n"])
 
-    def send_error(self, msgid: JSONRPCId, error: JSONRPCError, data: Any = None) -> None:
+    def send_error(
+        self, msgid: JSONRPCId, error: JSONRPCError, data: Any = None
+    ) -> None:
         """Send an error to JSONRPC."""
         ret: Dict[str, Any] = {
-            'id': msgid,
-            'error': {
-                'code': error.code,
-                'message': error.message,
-            }
+            "id": msgid,
+            "error": {
+                "code": error.code,
+                "message": error.message,
+            },
         }
         if data:
-            ret['error']['data'] = data
-        self.transport.writelines([json.dumps(ret).encode('utf-8'), b'\n'])
+            ret["error"]["data"] = data
+        self.transport.writelines([json.dumps(ret).encode("utf-8"), b"\n"])
 
 
-KT = TypeVar('KT')
-VT = TypeVar('VT')
+KT = TypeVar("KT")
+VT = TypeVar("VT")
 
 
 class MaxSizeOrderedDict(OrderedDict, Generic[KT, VT]):  # type: ignore
@@ -293,7 +317,9 @@ class MaxSizeOrderedDict(OrderedDict, Generic[KT, VT]):  # type: ignore
                 self.popitem(False)
 
 
-def calculate_expected_mining_time(miners_hashrate_ghs: float, job_weight: float) -> float:
+def calculate_expected_mining_time(
+    miners_hashrate_ghs: float, job_weight: float
+) -> float:
     """Calculate expected mining time. Return -1 if there is no miner.
 
     Let K be the number of attempts to find a solution. We know that `K` follows a geometric distribution.
@@ -326,34 +352,34 @@ def calculate_expected_mining_time(miners_hashrate_ghs: float, job_weight: float
         # We return a default expected mining time. For further information, see the
         # docstring of the constant.
         return DEFAULT_EXPECTED_MINING_TIME
-    return 3 * (2**(job_weight - 30)) / miners_hashrate_ghs
+    return 3 * (2 ** (job_weight - 30)) / miners_hashrate_ghs
 
 
-def tx_or_block_from_bytes(data: bytes) -> 'BaseTransaction':
+def tx_or_block_from_bytes(data: bytes) -> "BaseTransaction":
     """Create the correct tx subclass from a sequence of bytes."""
     from hathorlib import TxVersion
 
     # version field takes up the first 2 bytes
-    version = int.from_bytes(data[0:2], 'big')
+    version = int.from_bytes(data[0:2], "big")
 
     tx_version = TxVersion(version)
     cls = tx_version.get_cls()
     return cls.create_from_struct(data)
 
 
-def start_logging(loop: Optional['AbstractEventLoop'] = None) -> None:
+def start_logging(loop: Optional["AbstractEventLoop"] = None) -> None:
     """Initialize logging."""
     if loop is None:
         loop = asyncio.get_event_loop()
 
-    def _exception_handler(loop: 'AbstractEventLoop', context: Dict[str, Any]) -> None:
+    def _exception_handler(loop: "AbstractEventLoop", context: Dict[str, Any]) -> None:
         """Handle unhandled exceptions in asyncio's main loop."""
-        message = context.get('message')
+        message = context.get("message")
         if not message:
-            message = 'Unhandled exception in event loop'
+            message = "Unhandled exception in event loop"
 
         exc_info: Any
-        exception = context.get('exception')
+        exception = context.get("exception")
         if exception is not None:
             exc_info = (type(exception), exception, exception.__traceback__)
         else:
@@ -361,16 +387,16 @@ def start_logging(loop: Optional['AbstractEventLoop'] = None) -> None:
 
         extra = {}
         for key in sorted(context):
-            if key in {'message', 'exception'}:
+            if key in {"message", "exception"}:
                 continue
             value = context[key]
-            if key == 'source_traceback':
-                tb = ''.join(traceback.format_list(value))
-                value = 'Object created at (most recent call last):\n'
+            if key == "source_traceback":
+                tb = "".join(traceback.format_list(value))
+                value = "Object created at (most recent call last):\n"
                 value += tb.rstrip()
-            elif key == 'handle_traceback':
-                tb = ''.join(traceback.format_list(value))
-                value = 'Handle created at (most recent call last):\n'
+            elif key == "handle_traceback":
+                tb = "".join(traceback.format_list(value))
+                value = "Handle created at (most recent call last):\n"
                 value += tb.rstrip()
             else:
                 value = repr(value)

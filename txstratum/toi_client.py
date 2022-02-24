@@ -31,10 +31,10 @@ class TOIAsyncClient:
     """TOI Service async client based on aiohttp.ClientSession."""
 
     def __init__(
-            self,
-            base_url: str,
-            apikey: Optional[str] = None,
-            session: Optional[ClientSession] = None,
+        self,
+        base_url: str,
+        apikey: Optional[str] = None,
+        session: Optional[ClientSession] = None,
     ) -> None:
         """Configure TOIAsyncClient session and auth.
 
@@ -54,7 +54,7 @@ class TOIAsyncClient:
     @classmethod
     def make_session(self, apikey: str) -> ClientSession:
         """Create aiohttp.ClientSession with auth headers."""
-        return ClientSession(headers={'X-APIKEY': apikey})
+        return ClientSession(headers={"X-APIKEY": apikey})
 
     def endpoint(self, path: str) -> str:
         """Build an URL from path."""
@@ -66,25 +66,27 @@ class TOIAsyncClient:
             await self.session.close()
 
     async def check_blacklist(
-            self, *,
-            tx_ids: Optional[List[str]] = None,
-            addresses: Optional[List[str]] = None,
-            reasons: Optional[List[str]] = None) -> CheckBlacklist:
+        self,
+        *,
+        tx_ids: Optional[List[str]] = None,
+        addresses: Optional[List[str]] = None,
+        reasons: Optional[List[str]] = None
+    ) -> CheckBlacklist:
         """Check if any of `tx_ids` and `addresses` are banned."""
-        endpoint = self.endpoint('check/blacklist/')
-        reasons = reasons or ['attack', 'legal', 'ban']
-        params = {'reasons': reasons}
+        endpoint = self.endpoint("check/blacklist/")
+        reasons = reasons or ["attack", "legal", "ban"]
+        params = {"reasons": reasons}
         if tx_ids:
-            params['tx_id'] = tx_ids
+            params["tx_id"] = tx_ids
         if addresses:
-            params['address'] = addresses
+            params["address"] = addresses
         async with self.session.get(endpoint, params=params) as response:
             if response.status == 200:
                 r = await response.json()
                 return CheckBlacklist(**r)
             body = await response.text()
             self.log.warning(
-                message='TOI Service unexpected response',
+                message="TOI Service unexpected response",
                 status=response.status,
                 body=body,
             )

@@ -21,17 +21,17 @@ if TYPE_CHECKING:
 class JobStatus(enum.Enum):
     """Job status."""
 
-    PENDING = 'pending'
-    GETTING_PARENTS = 'getting-parents'
-    ENQUEUED = 'enqueued'
-    MINING = 'mining'
-    DONE = 'done'
-    FAILED = 'failed'
-    TIMEOUT = 'timeout'
-    CANCELLED = 'cancelled'
+    PENDING = "pending"
+    GETTING_PARENTS = "getting-parents"
+    ENQUEUED = "enqueued"
+    MINING = "mining"
+    DONE = "done"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
 
     @classmethod
-    def get_after_mining_states(cls) -> Set['JobStatus']:
+    def get_after_mining_states(cls) -> Set["JobStatus"]:
         """Return a set with all possible states after mining has finished."""
         return set([cls.DONE, cls.FAILED, cls.TIMEOUT, cls.CANCELLED])
 
@@ -43,8 +43,14 @@ class TxJob:
     reaching a miner.
     """
 
-    def __init__(self, data: bytes, *, add_parents: bool = False, propagate: bool = False,
-                 timeout: Optional[float] = None):
+    def __init__(
+        self,
+        data: bytes,
+        *,
+        add_parents: bool = False,
+        propagate: bool = False,
+        timeout: Optional[float] = None
+    ):
         """Init TxJob.
 
         add_parents: Add parents before mining tx.
@@ -62,7 +68,7 @@ class TxJob:
         self.expected_mining_time: float = 0
 
         self.status: JobStatus = JobStatus.PENDING
-        self.message: str = ''
+        self.message: str = ""
         self.created_at: float = txstratum.time.time()
         self.started_at: Optional[float] = None
         self.submitted_at: Optional[float] = None
@@ -133,22 +139,22 @@ class TxJob:
             expected_total_time: int, sum of expected_queue_time and expected_mining_time (in seconds)
         """
         return {
-            'job_id': self.uuid.hex(),
-            'status': self.status.value,
-            'message': self.message,
-            'created_at': self.created_at,
-            'tx': {
-                'nonce': self.nonce.hex() if self.nonce else None,
-                'parents': [x.hex() for x in self._tx.parents],
-                'timestamp': self.timestamp,
-                'weight': self._tx.weight,
+            "job_id": self.uuid.hex(),
+            "status": self.status.value,
+            "message": self.message,
+            "created_at": self.created_at,
+            "tx": {
+                "nonce": self.nonce.hex() if self.nonce else None,
+                "parents": [x.hex() for x in self._tx.parents],
+                "timestamp": self.timestamp,
+                "weight": self._tx.weight,
             },
-            'timeout': self.timeout,
-            'submitted_at': self.submitted_at,
-            'total_time': self.total_time,
-            'expected_queue_time': self.expected_queue_time,
-            'expected_mining_time': self.expected_mining_time,
-            'expected_total_time': self.expected_queue_time + self.expected_mining_time,
+            "timeout": self.timeout,
+            "submitted_at": self.submitted_at,
+            "total_time": self.total_time,
+            "expected_queue_time": self.expected_queue_time,
+            "expected_mining_time": self.expected_mining_time,
+            "expected_total_time": self.expected_queue_time + self.expected_mining_time,
         }
 
 

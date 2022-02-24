@@ -20,6 +20,7 @@ class TimeTestCase(asynctest.ClockedTestCase):  # type: ignore
 
     async def test_clock_time(self):
         from tests.utils import Clock
+
         clock = Clock(self.loop)
         ref = clock.ref_time
 
