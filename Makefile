@@ -51,8 +51,12 @@ flake8: $(py_sources) $(py_tests)
 isort-check: $(py_sources) $(py_tests)
 	isort --check-only $^
 
+.PHONY: black-check
+black-check:
+	black --check .
+
 .PHONY: check
-check: flake8 isort-check mypy
+check: flake8 black-check isort-check mypy
 
 # formatting:
 
