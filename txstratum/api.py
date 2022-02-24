@@ -40,10 +40,18 @@ logger = get_logger()
 class App:
     """API used to manage tx job."""
 
-    def __init__(self, manager: 'TxMiningManager', *, max_tx_weight: Optional[float] = None,
-                 max_timestamp_delta: Optional[int] = None, tx_timeout: Optional[float] = None,
-                 fix_invalid_timestamp: bool = False, max_output_script_size: Optional[int] = None,
-                 only_standard_script: bool = True, tx_filters: Optional[List['TXFilter']] = None):
+    def __init__(
+        self,
+        manager: "TxMiningManager",
+        *,
+        max_tx_weight: Optional[float] = None,
+        max_timestamp_delta: Optional[int] = None,
+        tx_timeout: Optional[float] = None,
+        fix_invalid_timestamp: bool = False,
+        max_output_script_size: Optional[int] = None,
+        only_standard_script: bool = True,
+        tx_filters: Optional[List["TXFilter"]] = None
+    ):
         """Init App."""
         super().__init__()
         self.log = logger.new()
@@ -55,11 +63,11 @@ class App:
         self.only_standard_script: bool = only_standard_script
         self.tx_filters = tx_filters or []
         self.app = web.Application()
-        self.app.router.add_get('/health-check', self.health_check)
-        self.app.router.add_get('/mining-status', self.mining_status)
-        self.app.router.add_get('/job-status', self.job_status)
-        self.app.router.add_post('/submit-job', self.submit_job)
-        self.app.router.add_post('/cancel-job', self.cancel_job)
+        self.app.router.add_get("/health-check", self.health_check)
+        self.app.router.add_get("/mining-status", self.mining_status)
+        self.app.router.add_get("/job-status", self.job_status)
+        self.app.router.add_post("/submit-job", self.submit_job)
+        self.app.router.add_post("/cancel-job", self.cancel_job)
 
         self.fix_invalid_timestamp: bool = fix_invalid_timestamp
 
@@ -142,7 +150,9 @@ class App:
         add_parents = data.get("add_parents", False)
         propagate = data.get("propagate", False)
 
-        job = TxJob(tx_bytes, add_parents=add_parents, propagate=propagate, timeout=timeout)
+        job = TxJob(
+            tx_bytes, add_parents=add_parents, propagate=propagate, timeout=timeout
+        )
         try:
             self.manager.add_job(job)
         except JobAlreadyExists:
@@ -157,18 +167,21 @@ class App:
         """Return job from uuid_hex. It raises web exceptions for common issues."""
         if not uuid_hex:
             raise web.HTTPBadRequest(
-                body=json.dumps({"error": "missing-job-id"}).encode("ascii"), content_type="application/json"
+                body=json.dumps({"error": "missing-job-id"}).encode("ascii"),
+                content_type="application/json",
             )
         try:
             uuid = bytes.fromhex(uuid_hex)
         except ValueError:
             raise web.HTTPBadRequest(
-                body=json.dumps({"error": "invalid-uuid"}).encode("ascii"), content_type="application/json"
+                body=json.dumps({"error": "invalid-uuid"}).encode("ascii"),
+                content_type="application/json",
             )
         job = self.manager.get_job(uuid)
         if job is None:
             raise web.HTTPNotFound(
-                body=json.dumps({"error": "job-not-found"}).encode("ascii"), content_type="application/json"
+                body=json.dumps({"error": "job-not-found"}).encode("ascii"),
+                content_type="application/json",
             )
         return job
 

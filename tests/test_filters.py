@@ -29,22 +29,41 @@ class AsyncMock(MagicMock):  # type: ignore
 
 def create_tx_from(inputs: List[TxInput], outputs: List[TxOutput]) -> Transaction:
     tx = Transaction()
-    tx.inputs.extend(inputs or [TxInput(tx_id=bytes.fromhex("0000cafe" * 8), index=0, data=bytes.fromhex("cafe"))])
+    tx.inputs.extend(
+        inputs
+        or [
+            TxInput(
+                tx_id=bytes.fromhex("0000cafe" * 8), index=0, data=bytes.fromhex("cafe")
+            )
+        ]
+    )
     tx.outputs.extend(
-        outputs or [TxOutput(value=1, script=P2PKH.create_output_script(bytes.fromhex("cafecafe01" * 5)))]
+        outputs
+        or [
+            TxOutput(
+                value=1,
+                script=P2PKH.create_output_script(bytes.fromhex("cafecafe01" * 5)),
+            )
+        ]
     )
     tx.parents.extend([bytes.fromhex("1234abcd" * 8)] * 2)
     tx.update_hash()
     return tx
 
 
-def create_tx_with(in_txs: List[bytes] = [], out_addresses: List[str] = []) -> Transaction:
+def create_tx_with(
+    in_txs: List[bytes] = [], out_addresses: List[str] = []
+) -> Transaction:
     inputs = []
     outputs = []
     for tx_id in in_txs:
         inputs.append(TxInput(tx_id=tx_id, index=0, data=bytes.fromhex("cafe")))
     for address in out_addresses:
-        outputs.append(TxOutput(value=1, script=P2PKH.create_output_script(decode_address(address))))
+        outputs.append(
+            TxOutput(
+                value=1, script=P2PKH.create_output_script(decode_address(address))
+            )
+        )
     return create_tx_from(inputs, outputs)
 
 

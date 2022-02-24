@@ -110,7 +110,9 @@ class AppTestCase(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_job_status_not_found(self):
-        resp = await self.client.request("GET", "/job-status", params={"job-id": "1234AB"})
+        resp = await self.client.request(
+            "GET", "/job-status", params={"job-id": "1234AB"}
+        )
         data = await resp.json()
         self.assertEqual(404, resp.status)
         self.assertEqual({"error": "job-not-found"}, data)
@@ -159,7 +161,9 @@ class AppTestCase(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_submit_job_invalid_tx_2(self):
-        resp = await self.client.request("POST", "/submit-job", json={"tx": INVALID_TX_DATA.hex()})
+        resp = await self.client.request(
+            "POST", "/submit-job", json={"tx": INVALID_TX_DATA.hex()}
+        )
         data = await resp.json()
         self.assertEqual(400, resp.status)
         self.assertEqual({"error": "invalid-tx"}, data)
@@ -184,7 +188,9 @@ class AppTestCase(AioHTTPTestCase):
     async def test_submit_job_fix_invalid_tx_timestamp1(self):
         self.myapp.fix_invalid_timestamp = True
         tx_bytes = update_timestamp(TX1_DATA, delta=MAX_TIMESTAMP_DELTA + 1)
-        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_bytes.hex()})
+        resp = await self.client.request(
+            "POST", "/submit-job", json={"tx": tx_bytes.hex()}
+        )
         self.assertEqual(200, resp.status)
         data = await resp.json()
         job_id = bytes.fromhex(data["job_id"])
@@ -197,7 +203,9 @@ class AppTestCase(AioHTTPTestCase):
     async def test_submit_job_fix_invalid_tx_timestamp2(self):
         self.myapp.fix_invalid_timestamp = True
         tx_bytes = update_timestamp(TX1_DATA, delta=-(MAX_TIMESTAMP_DELTA + 1))
-        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_bytes.hex()})
+        resp = await self.client.request(
+            "POST", "/submit-job", json={"tx": tx_bytes.hex()}
+        )
         self.assertEqual(200, resp.status)
         data = await resp.json()
         job_id = bytes.fromhex(data["job_id"])
@@ -273,31 +281,41 @@ class AppTestCase(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_cancel_job_invalid_job_id(self):
-        resp = await self.client.request("POST", "/cancel-job", params={"job-id": "XYZ"})
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": "XYZ"}
+        )
         data = await resp.json()
         self.assertEqual(400, resp.status)
         self.assertEqual({"error": "invalid-uuid"}, data)
 
     @unittest_run_loop
     async def test_cancel_job_not_found(self):
-        resp = await self.client.request("POST", "/cancel-job", params={"job-id": "1234"})
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": "1234"}
+        )
         data = await resp.json()
         self.assertEqual(404, resp.status)
         self.assertEqual({"error": "job-not-found"}, data)
 
     @unittest_run_loop
     async def test_submit_job_success(self):
-        resp = await self.client.request("POST", "/submit-job", json={"tx": update_timestamp(TX1_DATA).hex()})
+        resp = await self.client.request(
+            "POST", "/submit-job", json={"tx": update_timestamp(TX1_DATA).hex()}
+        )
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
 
-        resp = await self.client.request("GET", "/job-status", params={"job-id": data1["job_id"]})
+        resp = await self.client.request(
+            "GET", "/job-status", params={"job-id": data1["job_id"]}
+        )
         data2 = await resp.json()
         self.assertEqual(200, resp.status)
 
         self.assertEqual(data1, data2)
 
-        resp = await self.client.request("POST", "/cancel-job", params={"job-id": data1["job_id"]})
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": data1["job_id"]}
+        )
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
 
@@ -308,13 +326,17 @@ class AppTestCase(AioHTTPTestCase):
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
 
-        resp = await self.client.request("GET", "/job-status", params={"job-id": data1["job_id"]})
+        resp = await self.client.request(
+            "GET", "/job-status", params={"job-id": data1["job_id"]}
+        )
         data2 = await resp.json()
         self.assertEqual(200, resp.status)
 
         self.assertEqual(data1, data2)
 
-        resp = await self.client.request("POST", "/cancel-job", params={"job-id": data1["job_id"]})
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": data1["job_id"]}
+        )
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
 
@@ -325,12 +347,16 @@ class AppTestCase(AioHTTPTestCase):
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
 
-        resp = await self.client.request("GET", "/job-status", params={"job-id": data1["job_id"]})
+        resp = await self.client.request(
+            "GET", "/job-status", params={"job-id": data1["job_id"]}
+        )
         data2 = await resp.json()
         self.assertEqual(200, resp.status)
 
         self.assertEqual(data1, data2)
 
-        resp = await self.client.request("POST", "/cancel-job", params={"job-id": data1["job_id"]})
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": data1["job_id"]}
+        )
         data1 = await resp.json()
         self.assertEqual(200, resp.status)

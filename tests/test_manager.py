@@ -104,7 +104,9 @@ class HathorClientTest(HathorClient):
         return True
 
 
-def _get_ready_miner(manager: TxMiningManager, address: Optional[str] = None) -> StratumProtocol:
+def _get_ready_miner(
+    manager: TxMiningManager, address: Optional[str] = None
+) -> StratumProtocol:
     conn = StratumProtocol(manager)
     conn._update_job_timestamp = False
 
@@ -129,7 +131,9 @@ class ManagerTestCase(unittest.TestCase):
 
         self.client = HathorClientTest(server_url="")
         self.loop.run_until_complete(self.client.start())
-        self.manager = TxMiningManager(backend=self.client, pubsub=MagicMock(), address=address)
+        self.manager = TxMiningManager(
+            backend=self.client, pubsub=MagicMock(), address=address
+        )
         self.loop.run_until_complete(self.manager.start())
         self.loop.run_until_complete(self.manager.wait_for_block_template())
         self.assertTrue(len(self.manager.block_template) > 0)
@@ -158,7 +162,9 @@ class ManagerTestCase(unittest.TestCase):
         for idx, (cause, invalid_address) in enumerate(invalid_addresses):
             with self.assertRaises(InvalidAddress):
                 print("Address #{}: {} ({})".format(idx, cause, invalid_address))
-                TxMiningManager(backend=self.client, pubsub=None, address=invalid_address)
+                TxMiningManager(
+                    backend=self.client, pubsub=None, address=invalid_address
+                )
 
     def test_miner_connect_disconnect(self):
         conn = StratumProtocol(self.manager)
@@ -741,7 +747,9 @@ class ManagerTestCase(unittest.TestCase):
             args = c[1]
             job_data = args[1]
             self.assertEqual(job_data["clean"], False)
-            self.assertEqual(job_data["data"], current_job.get_header_without_nonce().hex())
+            self.assertEqual(
+                job_data["data"], current_job.get_header_without_nonce().hex()
+            )
 
         conn.send_request.reset_mock()
 
@@ -773,7 +781,9 @@ class ManagerTestCase(unittest.TestCase):
         job_data = conn.send_request.call_args[0][1]
 
         self.assertEqual(job_data["clean"], True)
-        self.assertEqual(job_data["data"], conn.current_job.get_header_without_nonce().hex())
+        self.assertEqual(
+            job_data["data"], conn.current_job.get_header_without_nonce().hex()
+        )
 
     def test_miner_block_submission_after_receiving_tx(self):
         """
@@ -824,7 +834,9 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
 
         self.client = HathorClientTest(server_url="")
         self.loop.run_until_complete(self.client.start())
-        self.manager = TxMiningManager(backend=self.client, pubsub=MagicMock(), address=address)
+        self.manager = TxMiningManager(
+            backend=self.client, pubsub=MagicMock(), address=address
+        )
         self.loop.run_until_complete(self.manager.start())
         self.loop.run_until_complete(self.manager.wait_for_block_template())
         self.assertTrue(len(self.manager.block_template) > 0)

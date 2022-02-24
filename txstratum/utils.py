@@ -165,7 +165,9 @@ class JSONRPCProtocol(LineProtocol):
             return self.send_error(None, self.PARSE_ERROR, data="cannot decode json")
         if not isinstance(data, dict):
             # This implementation does not support batch.
-            return self.send_error(None, self.INVALID_REQUEST, data="json must be an object")
+            return self.send_error(
+                None, self.INVALID_REQUEST, data="json must be an object"
+            )
         self.json_received(data)
 
     def json_received(self, data: Dict[Any, Any]) -> None:
@@ -177,7 +179,10 @@ class JSONRPCProtocol(LineProtocol):
         return self.send_error(
             None,
             self.INVALID_REQUEST,
-            data={"message": data, "error": "Could not identify message as request, result or error."},
+            data={
+                "message": data,
+                "error": "Could not identify message as request, result or error.",
+            },
         )
 
     def try_as_request(self, data: Dict[Any, Any]) -> bool:
@@ -223,14 +228,19 @@ class JSONRPCProtocol(LineProtocol):
             fn(params, msgid)
             return
 
-        data = {"method": method, "supported_methods": list(self.supported_methods.keys())}
+        data = {
+            "method": method,
+            "supported_methods": list(self.supported_methods.keys()),
+        }
         self.send_error(msgid, self.METHOD_NOT_FOUND, data=data)
 
     def handle_result(self, result: Any, msgid: JSONRPCId) -> None:
         """Handle a result from JSONRPC."""
         raise NotImplementedError
 
-    def handle_error(self, code: int, message: str, data: Any, msgid: JSONRPCId) -> None:
+    def handle_error(
+        self, code: int, message: str, data: Any, msgid: JSONRPCId
+    ) -> None:
         """Handle an error from JSONRPC."""
         raise NotImplementedError
 
@@ -252,7 +262,9 @@ class JSONRPCProtocol(LineProtocol):
         }
         self.transport.writelines([json.dumps(ret).encode("utf-8"), b"\n"])
 
-    def send_error(self, msgid: JSONRPCId, error: JSONRPCError, data: Any = None) -> None:
+    def send_error(
+        self, msgid: JSONRPCId, error: JSONRPCError, data: Any = None
+    ) -> None:
         """Send an error to JSONRPC."""
         ret: Dict[str, Any] = {
             "id": msgid,
@@ -305,7 +317,9 @@ class MaxSizeOrderedDict(OrderedDict, Generic[KT, VT]):  # type: ignore
                 self.popitem(False)
 
 
-def calculate_expected_mining_time(miners_hashrate_ghs: float, job_weight: float) -> float:
+def calculate_expected_mining_time(
+    miners_hashrate_ghs: float, job_weight: float
+) -> float:
     """Calculate expected mining time. Return -1 if there is no miner.
 
     Let K be the number of attempts to find a solution. We know that `K` follows a geometric distribution.

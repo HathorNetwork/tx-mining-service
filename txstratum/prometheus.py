@@ -62,7 +62,9 @@ METRICS_PUBSUB = {
         labelnames=["miner_type"],
     ),
     "txs_waiting_time": Histogram(
-        "txs_waiting_time", "Txs queue waiting time histogram", buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, float("inf"))
+        "txs_waiting_time",
+        "Txs queue waiting time histogram",
+        buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, float("inf")),
     ),
     "miner_completed_jobs": Counter(
         "miner_completed_jobs",
@@ -124,7 +126,9 @@ class BasePrometheusExporter:
         self.call_interval: int = 5
 
         # Periodic task to update metrics
-        self.update_metrics_task: Periodic = Periodic(self.update_metrics, self.call_interval)
+        self.update_metrics_task: Periodic = Periodic(
+            self.update_metrics, self.call_interval
+        )
 
     def _initial_setup(self) -> None:
         """Start a collector registry to send data to node exporter."""
@@ -137,11 +141,23 @@ class BasePrometheusExporter:
             self.registry.register(metric)
 
         self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_SOLVED, self._handle_tx_solved)
-        self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_TIMEOUT, self._handle_tx_timeout)
-        self.pubsub.subscribe(TxMiningEvents.MANAGER_NEW_TX_JOB, self._handle_new_tx_job)
-        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self._handle_protocol_job_completed)
-        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, self._handle_protocol_miner_subscribed)
-        self.pubsub.subscribe(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, self._handle_protocol_miner_disconnected)
+        self.pubsub.subscribe(
+            TxMiningEvents.MANAGER_TX_TIMEOUT, self._handle_tx_timeout
+        )
+        self.pubsub.subscribe(
+            TxMiningEvents.MANAGER_NEW_TX_JOB, self._handle_new_tx_job
+        )
+        self.pubsub.subscribe(
+            TxMiningEvents.PROTOCOL_JOB_COMPLETED, self._handle_protocol_job_completed
+        )
+        self.pubsub.subscribe(
+            TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED,
+            self._handle_protocol_miner_subscribed,
+        )
+        self.pubsub.subscribe(
+            TxMiningEvents.PROTOCOL_MINER_DISCONNECTED,
+            self._handle_protocol_miner_disconnected,
+        )
 
     async def update_metrics(self) -> None:
         """Update metric_gauges dict with new data from metrics."""
@@ -157,7 +173,9 @@ class BasePrometheusExporter:
         """Stop exporter."""
         asyncio.ensure_future(self.update_metrics_task.stop())
 
-    async def _handle_tx_solved(self, obj: Dict[str, Union[TxJob, StratumProtocol]]) -> None:
+    async def _handle_tx_solved(
+        self, obj: Dict[str, Union[TxJob, StratumProtocol]]
+    ) -> None:
         tx_job = cast(TxJob, obj["tx_job"])
         protocol = cast(StratumProtocol, obj["protocol"])
 
@@ -188,18 +206,30 @@ class BasePrometheusExporter:
             miner_type=protocol.miner_type, miner_address=protocol.miner_address_str
         ).inc()
 
-    async def _handle_protocol_miner_subscribed(self, protocol: StratumProtocol) -> None:
-        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(1)
+    async def _handle_protocol_miner_subscribed(
+        self, protocol: StratumProtocol
+    ) -> None:
+        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
+            1
+        )
 
-    async def _handle_protocol_miner_disconnected(self, protocol: StratumProtocol) -> None:
-        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(0)
+    async def _handle_protocol_miner_disconnected(
+        self, protocol: StratumProtocol
+    ) -> None:
+        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
+            0
+        )
 
 
 class PrometheusExporter(BasePrometheusExporter):
     """Class that sends hathor metrics to a node exporter that will be read by Prometheus."""
 
     def __init__(
-        self, manager: "TxMiningManager", pubsub: "PubSubManager", path: str, filename: str = "tx-mining-service.prom"
+        self,
+        manager: "TxMiningManager",
+        pubsub: "PubSubManager",
+        path: str,
+        filename: str = "tx-mining-service.prom",
     ):
         """Init PrometheusExporter.
 

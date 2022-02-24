@@ -31,7 +31,10 @@ if TYPE_CHECKING:
 
 logger = get_logger()
 settings = HathorSettings()
-VALID_FIRST_BYTE = {binary_to_int(settings.P2PKH_VERSION_BYTE), binary_to_int(settings.MULTISIG_VERSION_BYTE)}
+VALID_FIRST_BYTE = {
+    binary_to_int(settings.P2PKH_VERSION_BYTE),
+    binary_to_int(settings.MULTISIG_VERSION_BYTE),
+}
 
 
 class SubmittedWork(NamedTuple):
@@ -57,10 +60,14 @@ class StratumProtocol(JSONRPCProtocol):
     """
 
     ESTIMATOR_LOOP_INTERVAL = 15  # in seconds, "frequency" that the function that updates the estimator will be called
-    ESTIMATOR_WINDOW_INTERVAL = 60 * 15  # in seconds, size of the window to use for estimating miner's hashrate
+    ESTIMATOR_WINDOW_INTERVAL = (
+        60 * 15
+    )  # in seconds, size of the window to use for estimating miner's hashrate
     TARGET_JOB_TIME = 15  # in seconds, adjust difficulty so jobs take this long
     JOB_UPDATE_INTERVAL = 2  # in seconds, to update the timestamp of the job
-    MESSAGES_TIMEOUT_INTERVAL = 5  # in seconds, the interval to clear timed out messages
+    MESSAGES_TIMEOUT_INTERVAL = (
+        5  # in seconds, the interval to clear timed out messages
+    )
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
     MAX_WEIGHT = 60.0  # maximum "difficulty" to assign to jobs
@@ -84,7 +91,9 @@ class StratumProtocol(JSONRPCProtocol):
         self.miner_address_str: Optional[str] = None
         self.miner_version: str = "unknown"
 
-        self.jobs: MaxSizeOrderedDict[bytes, "MinerJob"] = MaxSizeOrderedDict(max=self.MAX_JOBS)
+        self.jobs: MaxSizeOrderedDict[bytes, "MinerJob"] = MaxSizeOrderedDict(
+            max=self.MAX_JOBS
+        )
         self.current_job: Optional["MinerJob"] = None
         self.current_weight: float = self.INITIAL_WEIGHT
         self.hashrate_ghs: float = 0.0
@@ -132,7 +141,9 @@ class StratumProtocol(JSONRPCProtocol):
     def handle_result(self, result: Any, msgid: JSONRPCId) -> None:
         """Handle a result from JSONRPC."""
         if msgid not in self.messages_in_transit:
-            self.log.warning("Received result for unknown message", msgid=msgid, result=result)
+            self.log.warning(
+                "Received result for unknown message", msgid=msgid, result=result
+            )
             return
 
         assert type(msgid) is int
@@ -143,7 +154,11 @@ class StratumProtocol(JSONRPCProtocol):
             self.log.info("Miner version: {}".format(result), miner_id=self.miner_id)
             self.miner_version = result
         else:
-            self.log.error("Cant handle result: {}".format(result), miner_id=self.miner_id, msgid=msgid)
+            self.log.error(
+                "Cant handle result: {}".format(result),
+                miner_id=self.miner_id,
+                msgid=msgid,
+            )
 
     def get_next_message_id(self) -> int:
         """Return the next message id."""
@@ -156,7 +171,9 @@ class StratumProtocol(JSONRPCProtocol):
         msgid = self.get_next_message_id()
 
         self.messages_in_transit[msgid] = MessageInTransit(
-            id=msgid, method=method, timeout=txstratum.time.time() + self.MESSAGE_TIMEOUT
+            id=msgid,
+            method=method,
+            timeout=txstratum.time.time() + self.MESSAGE_TIMEOUT,
         )
         self.send_request(method, params, msgid)
 
@@ -200,7 +217,9 @@ class StratumProtocol(JSONRPCProtocol):
         """Start periodic tasks."""
         if self.estimator_task is None:
             # Start estimator periodic task.
-            self.estimator_task = Periodic(self.estimator_loop, self.ESTIMATOR_LOOP_INTERVAL)
+            self.estimator_task = Periodic(
+                self.estimator_loop, self.ESTIMATOR_LOOP_INTERVAL
+            )
             asyncio.ensure_future(self.estimator_task.start())
 
         if self.refresh_job_task is None:
@@ -210,7 +229,9 @@ class StratumProtocol(JSONRPCProtocol):
 
         if self.messages_timeout_task is None:
             # Start messages timeout periodic task.
-            self.messages_timeout_task = Periodic(self.messages_timeout_job, self.MESSAGES_TIMEOUT_INTERVAL)
+            self.messages_timeout_task = Periodic(
+                self.messages_timeout_job, self.MESSAGES_TIMEOUT_INTERVAL
+            )
             asyncio.ensure_future(self.messages_timeout_task.start())
 
     async def messages_timeout_job(self) -> None:
@@ -239,7 +260,10 @@ class StratumProtocol(JSONRPCProtocol):
         """Handle subscribe request from JSONRPC."""
         if self.refuse_new_miners:
             self.send_error(msgid, self.SERVICE_SHUTTING_DOWN)
-            self.log.info("Refused miner subscription because we are shutting down", address=self.miner_address_str)
+            self.log.info(
+                "Refused miner subscription because we are shutting down",
+                address=self.miner_address_str,
+            )
             return
 
         if params and "address" in params and params["address"] is not None:
@@ -278,7 +302,11 @@ class StratumProtocol(JSONRPCProtocol):
         """
         self.log.debug("handle submit", msgid=msgid, params=params)
         if "job_id" not in params or "nonce" not in params:
-            return self.send_error(msgid, self.INVALID_PARAMS, {"params": params, "required": ["job_id", "nonce"]})
+            return self.send_error(
+                msgid,
+                self.INVALID_PARAMS,
+                {"params": params, "required": ["job_id", "nonce"]},
+            )
 
         try:
             job_id = bytes.fromhex(params["job_id"])
@@ -301,7 +329,10 @@ class StratumProtocol(JSONRPCProtocol):
             return self.send_error(
                 msgid,
                 self.STALE_JOB,
-                {"current_job": self.current_job and self.current_job.uuid.hex(), "job_id": job_id.hex()},
+                {
+                    "current_job": self.current_job and self.current_job.uuid.hex(),
+                    "job_id": job_id.hex(),
+                },
             )
 
         obj = job.get_object()
@@ -309,7 +340,10 @@ class StratumProtocol(JSONRPCProtocol):
         obj.update_hash()
         if not obj.verify_pow(override_weight=job.share_weight):
             self.log.error(
-                "Invalid share weight", uuid=job_id.hex(), share_weight=job.share_weight, data=job.get_data().hex()
+                "Invalid share weight",
+                uuid=job_id.hex(),
+                share_weight=job.share_weight,
+                data=job.get_data().hex(),
             )
             return self.send_error(msgid, self.INVALID_SOLUTION)
 
@@ -324,7 +358,9 @@ class StratumProtocol(JSONRPCProtocol):
         if isinstance(job, MinerBlockJob):
             assert job.started_at is not None
             dt = job.submitted_at - job.started_at
-            self._submitted_work.append(SubmittedWork(job.submitted_at, job.share_weight, dt))
+            self._submitted_work.append(
+                SubmittedWork(job.submitted_at, job.share_weight, dt)
+            )
         # Too many jobs too fast, increase difficulty out of caution (more than 10 submits within the last 10s)
         if sum(1 for x in self._submitted_work if now - x.timestamp < 10) > 10:
             # Doubles the difficulty
@@ -367,7 +403,11 @@ class StratumProtocol(JSONRPCProtocol):
             return
         now = txstratum.time.time()
         # remove old entries
-        self._submitted_work = [x for x in self._submitted_work if now - x.timestamp < self.ESTIMATOR_WINDOW_INTERVAL]
+        self._submitted_work = [
+            x
+            for x in self._submitted_work
+            if now - x.timestamp < self.ESTIMATOR_WINDOW_INTERVAL
+        ]
         # too little jobs, reduce difficulty
         if len(self._submitted_work) == 0:
             self.set_current_weight(self.current_weight - 0.5)

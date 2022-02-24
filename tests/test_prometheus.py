@@ -88,22 +88,30 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
         protocol.miner_address_str = "abc123"
         protocol.miner_version = "cpuminer/1.0"
 
-        self.pubsub.emit(TxMiningEvents.MANAGER_TX_SOLVED, {"tx_job": txJob, "protocol": protocol})
+        self.pubsub.emit(
+            TxMiningEvents.MANAGER_TX_SOLVED, {"tx_job": txJob, "protocol": protocol}
+        )
         await self._run_all_pending_events()
 
         await prometheus.update_metrics()
 
         # Check the metrics match the expected values
-        with open("tests/fixtures/expected_prometheus_metrics.prom", "r") as fp_expected:
+        with open(
+            "tests/fixtures/expected_prometheus_metrics.prom", "r"
+        ) as fp_expected:
             content_expected = fp_expected.read()
 
             # Removes lines with timestamp
-            content_expected = list(filter(lambda x: x.find("_created") < 0, content_expected.splitlines()))
+            content_expected = list(
+                filter(lambda x: x.find("_created") < 0, content_expected.splitlines())
+            )
 
         with open(prometheus.filepath, "r") as fp:
             content = fp.read()
 
             # Removes lines with timestamp
-            content = list(filter(lambda x: x.find("_created") < 0, content.splitlines()))
+            content = list(
+                filter(lambda x: x.find("_created") < 0, content.splitlines())
+            )
 
         self.assertEqual(content_expected, content)

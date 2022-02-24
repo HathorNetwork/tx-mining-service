@@ -37,14 +37,18 @@ class TXFilter(ABC):
 class FileFilter(TXFilter):
     """Filter tx based on a set of banned tx_ids and addresses."""
 
-    def __init__(self, banned_tx_ids: Set[bytes] = set(), banned_addresses: Set[str] = set()) -> None:
+    def __init__(
+        self, banned_tx_ids: Set[bytes] = set(), banned_addresses: Set[str] = set()
+    ) -> None:
         """Init filter."""
         self.log = logger.new()
         self.banned_tx_ids = banned_tx_ids
         self.banned_addresses = banned_addresses
 
     @classmethod
-    def load_from_files(cls, tx_filename: Optional[str], address_filename: Optional[str]) -> "FileFilter":
+    def load_from_files(
+        cls, tx_filename: Optional[str], address_filename: Optional[str]
+    ) -> "FileFilter":
         """Load banned tx and addresses from files and return an instance of FileFilter."""
         file_filter = cls()
         if tx_filename:
@@ -116,7 +120,9 @@ class TOIFilter(TXFilter):
                 addrs.add(p2pkh.address)
 
         try:
-            resp = await self.client.check_blacklist(tx_ids=list(txs), addresses=list(addrs))
+            resp = await self.client.check_blacklist(
+                tx_ids=list(txs), addresses=list(addrs)
+            )
             if resp.blacklisted:
                 self.log.info("banned", data=data, issues=resp.issues)
             return resp.blacklisted

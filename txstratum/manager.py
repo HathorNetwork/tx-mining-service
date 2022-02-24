@@ -40,7 +40,12 @@ class TxMiningManager:
     DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL = 3.0  # seconds
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
-    def __init__(self, backend: "HathorClient", pubsub: "PubSubManager", address: Optional[str] = None):
+    def __init__(
+        self,
+        backend: "HathorClient",
+        pubsub: "PubSubManager",
+        address: Optional[str] = None,
+    ):
         """Init TxMiningManager with backend."""
         if address is not None:
             # Validate address. If the address is invalid, it raises an InvalidAddress exception.
@@ -58,7 +63,9 @@ class TxMiningManager:
         self.latest_submitted_block_height: int = -1
         self.block_template_updated_at: float = 0
         self.block_template: Optional["BlockTemplate"] = None
-        self.block_template_update_interval = self.DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL
+        self.block_template_update_interval = (
+            self.DEFAULT_BLOCK_TEMPLATE_UPDATE_INTERVAL
+        )
         self.refuse_new_jobs = False
 
         # Statistics
@@ -78,7 +85,9 @@ class TxMiningManager:
     async def start(self) -> None:
         """Start the manager."""
         self.started_at = txstratum.time.time()
-        self.update_block_task = Periodic(self.update_block_template, self.block_template_update_interval)
+        self.update_block_task = Periodic(
+            self.update_block_template, self.block_template_update_interval
+        )
         await self.update_block_task.start()
 
     async def wait_for_block_template(self, interval: float = 0.1) -> None:
@@ -121,7 +130,9 @@ class TxMiningManager:
         self.miners[protocol.miner_id] = protocol
         self.update_miner_job(protocol)
 
-    def update_miner_job(self, protocol: StratumProtocol, *, clean: bool = False) -> None:
+    def update_miner_job(
+        self, protocol: StratumProtocol, *, clean: bool = False
+    ) -> None:
         """Send a new job for a miner."""
         job = self.get_best_job(protocol)
         if job is None:
@@ -130,7 +141,10 @@ class TxMiningManager:
             return
 
         if isinstance(job, MinerTxJob):
-            is_same_job = isinstance(protocol.current_job, MinerTxJob) and job.tx_job == protocol.current_job.tx_job
+            is_same_job = (
+                isinstance(protocol.current_job, MinerTxJob)
+                and job.tx_job == protocol.current_job.tx_job
+            )
 
             if not is_same_job:
                 # This will tell the miner to abandon its current job and start this immediately.
@@ -139,7 +153,9 @@ class TxMiningManager:
 
         protocol.update_job(job, clean=clean)
 
-    def submit_solution(self, protocol: StratumProtocol, job: MinerJob, nonce: bytes) -> None:
+    def submit_solution(
+        self, protocol: StratumProtocol, job: MinerJob, nonce: bytes
+    ) -> None:
         """Submit a new solution for a job. It is called by StratumProtocol."""
         if job.is_block:
             assert isinstance(job, MinerBlockJob)
@@ -181,9 +197,14 @@ class TxMiningManager:
             if tx_job.propagate:
                 tx_bytes = bytes(tx_job.get_tx())
                 asyncio.ensure_future(self.backend.push_tx_or_block(tx_bytes))
-            self.log.info("TxJob solved", propagate=tx_job.propagate, tx_job=tx_job.to_dict())
+            self.log.info(
+                "TxJob solved", propagate=tx_job.propagate, tx_job=tx_job.to_dict()
+            )
             self.txs_solved += 1
-            self.pubsub.emit(TxMiningEvents.MANAGER_TX_SOLVED, {"tx_job": tx_job, "protocol": protocol})
+            self.pubsub.emit(
+                TxMiningEvents.MANAGER_TX_SOLVED,
+                {"tx_job": tx_job, "protocol": protocol},
+            )
 
     def schedule_job_timeout(self, job: TxJob) -> None:
         """Schedule to have a TxJob marked as timeout."""
@@ -191,14 +212,18 @@ class TxMiningManager:
             job._timeout_timer.cancel()
         if job.timeout is not None:
             loop = asyncio.get_event_loop()
-            job._timeout_timer = loop.call_later(job.timeout, self._job_timeout_if_possible, job)
+            job._timeout_timer = loop.call_later(
+                job.timeout, self._job_timeout_if_possible, job
+            )
 
     def schedule_job_clean_up(self, job: TxJob) -> None:
         """Schedule to have a TxJob cleaned up."""
         if job._cleanup_timer:
             job._cleanup_timer.cancel()
         loop = asyncio.get_event_loop()
-        job._cleanup_timer = loop.call_later(self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job)
+        job._cleanup_timer = loop.call_later(
+            self.TX_CLEAN_UP_INTERVAL, self._job_clean_up, job
+        )
 
     async def update_block_template(self) -> None:
         """Update block template. It is periodically called."""
@@ -244,7 +269,9 @@ class TxMiningManager:
             "tx_queue": len(self.tx_queue),
             "tx_jobs": [job.to_dict() for job in self.tx_jobs.values()],
             "block_template_error": self.block_template_error,
-            "block_template": self.block_template.to_dict() if self.block_template else None,
+            "block_template": self.block_template.to_dict()
+            if self.block_template
+            else None,
         }
 
     def get_job(self, uuid: bytes) -> Optional[TxJob]:
@@ -266,7 +293,9 @@ class TxMiningManager:
         self.tx_jobs[job.uuid] = job
 
         miners_hashrate_ghs = sum(x.hashrate_ghs for x in self.miners.values())
-        job.expected_mining_time = calculate_expected_mining_time(miners_hashrate_ghs, job.get_weight())
+        job.expected_mining_time = calculate_expected_mining_time(
+            miners_hashrate_ghs, job.get_weight()
+        )
 
         self.log.info("New TxJob", job=job.to_dict())
         self.pubsub.emit(TxMiningEvents.MANAGER_NEW_TX_JOB, job)
@@ -313,7 +342,9 @@ class TxMiningManager:
         try:
             self.tx_queue.remove(job)
         except ValueError:
-            self.log.error("TxJob timeout but not in queue. This shouldnt happen", job=job)
+            self.log.error(
+                "TxJob timeout but not in queue. This shouldnt happen", job=job
+            )
         self.stop_mining_tx(job)
         # Schedule to clean it up.
         self.schedule_job_clean_up(job)
@@ -324,7 +355,9 @@ class TxMiningManager:
         job.status = JobStatus.ENQUEUED
         # When the total hashrate is unknown, `expected_mining_time` is set to -1. Thus, we need to
         # skip negative values when calculating the `expected_queue_time`.
-        job.expected_queue_time = sum(x.expected_mining_time for x in self.tx_queue if x.expected_mining_time > 0)
+        job.expected_queue_time = sum(
+            x.expected_mining_time for x in self.tx_queue if x.expected_mining_time > 0
+        )
         self.tx_queue.append(job)
 
         if job.timeout:
@@ -362,6 +395,10 @@ class TxMiningManager:
                 job.status = JobStatus.MINING
             return MinerTxJob(job)
         if self.block_template is None:
-            self.log.error("Cannot generate MinerBlockJob because block_template is empty")
+            self.log.error(
+                "Cannot generate MinerBlockJob because block_template is empty"
+            )
             return None
-        return MinerBlockJob(data=self.block_template.data, height=self.block_template.height)
+        return MinerBlockJob(
+            data=self.block_template.data, height=self.block_template.height
+        )

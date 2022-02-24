@@ -44,7 +44,12 @@ class TxJob:
     """
 
     def __init__(
-        self, data: bytes, *, add_parents: bool = False, propagate: bool = False, timeout: Optional[float] = None
+        self,
+        data: bytes,
+        *,
+        add_parents: bool = False,
+        propagate: bool = False,
+        timeout: Optional[float] = None
     ):
         """Init TxJob.
 

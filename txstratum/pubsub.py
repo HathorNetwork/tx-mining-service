@@ -30,9 +30,13 @@ class PubSubManager:
         """
         self.log = logger.new()
         self.loop = loop
-        self._subscribers: Dict[TxMiningEvents, List[Callable[[Any], Coroutine[Any, Any, Any]]]] = defaultdict(list)
+        self._subscribers: Dict[
+            TxMiningEvents, List[Callable[[Any], Coroutine[Any, Any, Any]]]
+        ] = defaultdict(list)
 
-    def subscribe(self, event: TxMiningEvents, callable: Callable[[Any], Coroutine[Any, Any, Any]]) -> None:
+    def subscribe(
+        self, event: TxMiningEvents, callable: Callable[[Any], Coroutine[Any, Any, Any]]
+    ) -> None:
         """Subscribe to an event.
 
         :param event: event to subscribe to
@@ -61,5 +65,7 @@ class PubSubManager:
         if exception:
             self.log.error(
                 "Exception when running PubSub subscriber",
-                traceback=traceback.format_exception(None, exception, exception.__traceback__),
+                traceback=traceback.format_exception(
+                    None, exception, exception.__traceback__
+                ),
             )
