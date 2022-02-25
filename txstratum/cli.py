@@ -19,6 +19,7 @@ from txstratum.api import App
 from txstratum.filters import FileFilter, TOIFilter, TXFilter
 from txstratum.manager import TxMiningManager
 from txstratum.pubsub import PubSubManager
+from txstratum.rate_limiter import MemoryLimiter, RedisLimiter
 from txstratum.toi_client import TOIAsyncClient
 
 logger = get_logger()
@@ -106,6 +107,18 @@ def create_parser() -> ArgumentParser:
         default=None,
     )
     parser.add_argument(
+        "--rate-limit-storage",
+        help="Storage to use for rate limiting",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--redis-url",
+        help="Redis url to be used by specific features",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
         "backend", help="Endpoint of the Hathor API (without version)", type=str
     )
 
@@ -183,12 +196,38 @@ class RunService:
                 log_config=args.log_config,
             )
 
+    def configure_rate_limiting(self) -> None:
+        """Parse rate limiting related args and configure rate limiting."""
+        if self.args.rate_limit_storage == "redis":
+            if not self.args.redis_url:
+                raise ValueError("Redis url is required to use redis rate limiting")
+
+            self.rate_limiter = RedisLimiter(self.args.redis_url)
+
+            logger.info(
+                "Rate Limit Configured",
+                storage=self.args.rate_limit_storage,
+                redis_url=self.args.redis_url,
+            )
+        elif self.args.rate_limit_storage == "memory":
+            self.rate_limiter = MemoryLimiter()
+
+            logger.info("Rate Limit Configured", storage=self.args.rate_limit_storage)
+        elif self.args.rate_limit_storage is not None:
+            raise ValueError(
+                f'Invalid rate limiting storage {self.args.rate_limit_storage}. Valid options are "redis" and "memory"'
+            )
+        else:
+            self.rate_limiter = None
+
     def execute(self) -> None:
         """Run the service according to the args."""
         if self.args.block_template_update_interval:
             self.manager.block_template_update_interval = (
                 self.args.block_template_update_interval
             )
+
+        self.configure_rate_limiting()
 
         self.loop.run_until_complete(self.backend.start())
         self.loop.run_until_complete(self.manager.start())
@@ -238,6 +277,7 @@ class RunService:
             fix_invalid_timestamp=self.args.fix_invalid_timestamp,
             only_standard_script=not self.args.allow_non_standard_script,
             tx_filters=self.tx_filters,
+            rate_limiter=self.rate_limiter,
         )
 
         logger.info(

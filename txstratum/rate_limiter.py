@@ -1,21 +1,24 @@
-from functools import wraps
-import json
-from typing import Callable, Awaitable, Tuple, Union, Optional
+# TODO: Add copyright?
+
 import asyncio
-from aiohttp.web import Request, Response
-from limits.storage import MemoryStorage
+import json
+from abc import ABC, abstractmethod
+from functools import wraps
+from typing import Awaitable, Callable, Optional, Tuple, Type, Union
+
 import limits.strategies
+from aiohttp.web import Request, Response
+from limits.storage import MemoryStorage, RedisStorage, Storage
 
 
 def get_default_keyfunc(ratelimit: str) -> Callable[[str], str]:
     def keyfunc(request: Request) -> Tuple[str, str]:
         """
-        Returns the user's IP
+        Returns the user's IP as key and the same rate limit for all IPs.
         """
-        ip = request.headers.get(
-            "X-Forwarded-For") or request.remote or "127.0.0.1"
+        ip = request.headers.get("X-Forwarded-For") or request.remote or "127.0.0.1"
         ip = ip.split(",")[0]
-        return ip, ratelimit 
+        return ip, ratelimit
 
     return keyfunc
 
@@ -34,14 +37,19 @@ class RateLimitExceeded:
         return self._detail
 
 
-class RateLimitDecorator:
+class BaseRateLimitDecorator:
     """
     Decorator to rate limit requests in the aiohttp.web framework
     """
 
-    def __init__(self, db: MemoryStorage, path_id: str, moving_window: limits.strategies.MovingWindowRateLimiter,
-                 keyfunc: Callable,
-                 error_handler: Optional[Union[Callable, Awaitable]] = None) -> None:
+    def __init__(
+        self,
+        db: Storage,
+        path_id: str,
+        moving_window: limits.strategies.MovingWindowRateLimiter,
+        keyfunc: Callable,
+        error_handler: Optional[Union[Callable, Awaitable]] = None,
+    ) -> None:
         self.keyfunc = keyfunc
         self.error_handler = error_handler
         self.db = db
@@ -79,109 +87,138 @@ class RateLimitDecorator:
     def get_item_for_key(self, key: str) -> limits.RateLimitItem:
         if not key in self.items:
             # TODO Issue a warning about this?
-            return self.items['default']
+            return self.items["default"]
 
         return self.items[key]
 
     def __call__(self, func: Callable) -> Awaitable:
         @wraps(func)
-        async def wrapper(*args) -> Response:
-            request = args[1]
-
-            print('request', request)
+        async def wrapper(request: Request) -> Response:
             key, ratelimit = self.keyfunc(request)
             db_key = f"{key}:{self.path_id or request.path}"
 
-            item= self.create_or_get_item(db_key, ratelimit)
+            item = self.create_or_get_item(db_key, ratelimit)
 
-            if not self.db.check():
-                self.db.reset()
+            if isinstance(self.db, MemoryStorage):
+                if not self.db.check():
+                    self.db.reset()
 
-            if asyncio.iscoroutinefunction(func):
-                # Returns a response if the number of calls exceeds the max amount of calls
-                if not self.moving_window.test(item, db_key):
-                    if self.error_handler is not None:
-                        if asyncio.iscoroutinefunction(self.error_handler):
-                            r = await self.error_handler(request, RateLimitExceeded(
-                                **{"detail": str(item)}))
-                            if isinstance(r, Allow):
-                                return await func(*args)
-                            return r
-                        else:
-                            r = self.error_handler(request, RateLimitExceeded(
-                                **{"detail": str(item)}))
-                            if isinstance(r, Allow):
-                                return await func(*args)
-                            return r
-                    data = json.dumps(
-                        {"error": f"Rate limit exceeded: {item}"})
-                    response = Response(
-                        text=data, content_type="application/json", status=429)
-                    response.headers.add(
-                        "error", f"Rate limit exceeded: {item}")
-                    return response
+            assert asyncio.iscoroutinefunction(func), "func must be a coroutine"
 
-                self.moving_window.hit(item, db_key)
-                # Returns normal response if the user did not go over the rate limit
-                return await func(*args)
-            else:
-                # Returns a response if the number of calls exceeds the max amount of calls
-                if not self.moving_window.test(item, db_key):
-                    if self.error_handler is not None:
-                        if asyncio.iscoroutinefunction(self.error_handler):
-                            r = await self.error_handler(request, RateLimitExceeded(
-                                **{"detail": str(item)}))
-                            if isinstance(r, Allow):
-                                return func(*args)
-                            return r
-                        else:
-                            r = self.error_handler(request, RateLimitExceeded(
-                                **{"detail": str(item)}))
-                            if isinstance(r, Allow):
-                                return func(*args)
-                            return r
-                    data = json.dumps(
-                        {"error": f"Rate limit exceeded: {item}"})
-                    response = Response(
-                        text=data, content_type="application/json", status=429)
-                    response.headers.add(
-                        "error", f"Rate limit exceeded: {item}")
-                    return response
+            # Returns a response if the number of calls exceeds the max amount of calls
+            if not self.moving_window.test(item, db_key):
+                if self.error_handler is not None:
+                    if asyncio.iscoroutinefunction(self.error_handler):
+                        r = await self.error_handler(
+                            request, RateLimitExceeded(**{"detail": str(item)})
+                        )
+                        if isinstance(r, Allow):
+                            return await func(request)
+                        return r
+                    else:
+                        r = self.error_handler(
+                            request, RateLimitExceeded(**{"detail": str(item)})
+                        )
+                        if isinstance(r, Allow):
+                            return await func(request)
+                        return r
+                data = json.dumps({"error": f"Rate limit exceeded: {item}"})
+                response = Response(
+                    text=data, content_type="application/json", status=429
+                )
+                response.headers.add("error", f"Rate limit exceeded: {item}")
+                return response
 
-                self.moving_window.hit(item, db_key)
-                # Returns normal response if the user did not go over the rate limit
-                return func(*args)
+            # Registers new hit and returns normal response if the user did not go over the rate limit
+            self.moving_window.hit(item, db_key)
+            return await func(request)
 
         return wrapper
 
 
-class Limiter:
+class RateLimiter(ABC):
+    @abstractmethod
+    def limit(
+        self,
+        keyfunc: Callable,
+        error_handler: Optional[Union[Callable, Awaitable]],
+        path_id: Optional[str],
+    ) -> Callable:
+        raise NotImplementedError
+
+
+class MemoryLimiter(RateLimiter):
     """
     ```
-    limiter = Limiter(keyfunc=your_keyfunc)
+    limiter = MemoryLimiter(keyfunc=your_keyfunc)
 
     @routes.get("/")
-    @limiter.limit("5/1")  # TODO Change this example
+    @limiter.limit(keyfunc=get_default_keyfunc("1/3"))
     def foo():
         return Response(text="Hello World")
     ```
     """
 
-    def __init__(self,
-                 error_handler: Optional[Union[Callable, Awaitable]] = None) -> None:
+    def __init__(
+        self, error_handler: Optional[Union[Callable, Awaitable]] = None
+    ) -> None:
         self.error_handler = error_handler
         self.db = MemoryStorage()
         self.moving_window = limits.strategies.MovingWindowRateLimiter(self.db)
 
-    def limit(self, keyfunc: Callable,
-              error_handler: Optional[Union[Callable, Awaitable]] = None, path_id: str = None) -> Callable:
+    def limit(
+        self,
+        keyfunc: Callable,
+        error_handler: Optional[Union[Callable, Awaitable]] = None,
+        path_id: str = None,
+    ) -> Callable:
         def wrapper(func: Callable) -> Awaitable:
             _error_handler = self.error_handler or error_handler
-            return RateLimitDecorator(keyfunc=keyfunc,
-                                      error_handler=_error_handler, db=self.db, path_id=path_id,
-                                      moving_window=self.moving_window)(func)
+
+            return BaseRateLimitDecorator(
+                keyfunc=keyfunc,
+                error_handler=_error_handler,
+                db=self.db,
+                path_id=path_id,
+                moving_window=self.moving_window,
+            )(func)
 
         return wrapper
 
-    async def reset(self):
-        self.db.reset()
+
+class RedisLimiter(RateLimiter):
+    """
+    ```
+    limiter = RedisLimiter(keyfunc=your_keyfunc, uri="redis://username:password@host:port")
+    @routes.get("/")
+    @limiter.limit(keyfunc=get_default_keyfunc("1/3"))
+    def foo():
+        return Response(text="Hello World")
+    ```
+    """
+
+    def __init__(
+        self, uri: str, error_handler: Optional[Union[Callable, Awaitable]] = None
+    ) -> None:
+        self.db = RedisStorage(uri=uri)
+        self.moving_window = limits.strategies.MovingWindowRateLimiter(self.db)
+        self.error_handler = error_handler
+
+    def limit(
+        self,
+        keyfunc: Callable = None,
+        error_handler: Optional[Union[Callable, Awaitable]] = None,
+        path_id: str = None,
+    ) -> Callable:
+        def wrapper(func: Callable) -> Awaitable:
+            _error_handler = self.error_handler or error_handler
+
+            return BaseRateLimitDecorator(
+                db=self.db,
+                keyfunc=keyfunc,
+                error_handler=_error_handler,
+                path_id=path_id,
+                moving_window=self.moving_window,
+            )(func)
+
+        return wrapper

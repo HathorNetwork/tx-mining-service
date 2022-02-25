@@ -4,17 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Coroutine, List, Optional
 
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
 from structlog import get_logger
-from txstratum.rate_limiter import Limiter, get_default_keyfunc
 
 import txstratum.time
 from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 from txstratum.jobs import JobStatus, TxJob
+from txstratum.rate_limiter import RateLimiter, get_default_keyfunc
 from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
@@ -37,8 +37,6 @@ TX_TIMEOUT: float = 20.0
 
 logger = get_logger()
 
-limiter = Limiter()
-
 
 class App:
     """API used to manage tx job."""
@@ -53,7 +51,8 @@ class App:
         fix_invalid_timestamp: bool = False,
         max_output_script_size: Optional[int] = None,
         only_standard_script: bool = True,
-        tx_filters: Optional[List["TXFilter"]] = None
+        tx_filters: Optional[List["TXFilter"]] = None,
+        rate_limiter: Optional[RateLimiter] = None
     ):
         """Init App."""
         super().__init__()
@@ -65,20 +64,45 @@ class App:
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.only_standard_script: bool = only_standard_script
         self.tx_filters = tx_filters or []
+        self.rate_limiter = rate_limiter
+
         self.app = web.Application()
-        self.app.router.add_get("/health-check", self.health_check)
-        self.app.router.add_get("/mining-status", self.mining_status)
-        self.app.router.add_get("/job-status", self.job_status)
-        self.app.router.add_post("/submit-job", self.submit_job)
-        self.app.router.add_post("/cancel-job", self.cancel_job)
+
+        self.app.router.add_get(
+            "/health-check",
+            self.rate_limit_wrapper(self.health_check, "1/1"),  # 1 request per 1 second
+        )
+        self.app.router.add_get(
+            "/mining-status",
+            self.rate_limit_wrapper(
+                self.mining_status, "1/1"
+            ),  # 1 request per 1 second
+        )
+        self.app.router.add_get(
+            "/job-status",
+            self.rate_limit_wrapper(self.job_status, "1/1"),  # 1 request per 1 second
+        )
+        self.app.router.add_post(
+            "/submit-job",
+            self.rate_limit_wrapper(self.submit_job, "1/1"),  # 1 request per 1 second
+        )
+        self.app.router.add_post(
+            "/cancel-job",
+            self.rate_limit_wrapper(self.cancel_job, "1/1"),  # 1 request per 1 second
+        )
 
         self.fix_invalid_timestamp: bool = fix_invalid_timestamp
+
+    def rate_limit_wrapper(self, func: Coroutine, rate_limit: str) -> web.Response:
+        if not self.rate_limiter:
+            return func
+
+        return self.rate_limiter.limit(keyfunc=get_default_keyfunc(rate_limit))(func)
 
     async def health_check(self, request: web.Request) -> web.Response:
         """Return that the service is running."""
         return web.json_response({"success": True})
 
-    @limiter.limit(keyfunc=get_default_keyfunc("1/3"))
     async def mining_status(self, request: web.Request) -> web.Response:
         """Return status of miners."""
         return web.json_response(self.manager.status())
