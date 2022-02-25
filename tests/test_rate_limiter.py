@@ -1,40 +1,29 @@
-import asynctest  # type: ignore[import]
 from aiohttp import web
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import AioHTTPTestCase
 
 from txstratum.rate_limiter import MemoryLimiter, get_default_keyfunc
-
-limiter = MemoryLimiter()
 
 
 class FakeApp:
     def __init__(self):
+        self.limiter = MemoryLimiter()
+
         self.app = web.Application()
         self.app.router.add_get(
-            "/route", limiter.limit(keyfunc=get_default_keyfunc("1/3"))(self.route)
+            "/route", self.limiter.limit(keyfunc=get_default_keyfunc("1/3"))(self.route)
         )
 
     async def route(self, request: web.Request) -> web.Response:
         return web.json_response({"success": True})
 
+    def clear(self):
+        self.limiter.db.reset()
 
-class RateLimiterTestCase(asynctest.ClockedTestCase):  # type: ignore[misc]
-    def setUp(self):
-        from tests.utils import Clock
 
-        self.clock = Clock(self.loop)
-        self.clock.enable()
-
-        self.app = FakeApp().app
-        self.server = TestServer(self.app, loop=self.loop)
-        self.client = TestClient(self.server, loop=self.loop)
-
-        self.loop.run_until_complete(self.client.start_server())
-
-    def tearDown(self):
-        self.loop.run_until_complete(self.client.close())
-
-        self.clock.disable()
+class RateLimiterTestCase(AioHTTPTestCase):
+    async def get_application(self):
+        self.fake_app = FakeApp()
+        return self.fake_app.app
 
     async def test_rate_limit(self):
         # First call should be allowed
@@ -49,12 +38,11 @@ class RateLimiterTestCase(asynctest.ClockedTestCase):  # type: ignore[misc]
         data = await resp.json()
         self.assertEqual(data["error"], "Rate limit exceeded: 1 per 3 second")
 
-        # TODO How to make time pass?
+        # Clear the rate limiter
+        self.fake_app.clear()
 
-        # # Third call should be allowed after 3 seconds
-        # await self.advance(3)
-
-        # resp = await self.client.request('GET', '/route')
-        # assert resp.status == 200
-        # data = await resp.json()
-        # self.assertTrue(data['success'])
+        # Third call should be allowed
+        resp = await self.client.request("GET", "/route")
+        assert resp.status == 200
+        data = await resp.json()
+        self.assertTrue(data["success"])
