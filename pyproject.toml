@@ -25,6 +25,7 @@ idna_ssl = "^1.1.0"
 asynctest = "^0.13.0"
 hathorlib = {version = "^0.1.1", extras = ["client"]}
 dataclasses = {version = "^0.8", python = ">=3.6,<3.7"}
+limits = "^2.3.3"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.8.4"

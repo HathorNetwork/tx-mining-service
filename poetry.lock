@@ -300,6 +300,24 @@ colors = ["colorama (>=0.4.3,<0.5.0)"]
 plugins = ["setuptools"]
 
 [[package]]
+name = "limits"
+version = "2.3.3"
+description = "Rate limiting utilities"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+all = ["redis (>3,<5.0.0)", "redis-py-cluster (>=2.0.0,<3)", "pymemcache (>3,<4.0.0)", "pymongo (>3,<5)", "coredis[hiredis] (>=2.0.0,<3)", "emcache (>=0.6.1)", "motor (>=2.5,<3)"]
+async-memcached = ["emcache (>=0.6.1)"]
+async-mongodb = ["motor (>=2.5,<3)"]
+async-redis = ["coredis[hiredis] (>=2.0.0,<3)"]
+memcached = ["pymemcache (>3,<4.0.0)"]
+mongodb = ["pymongo (>3,<5)"]
+redis = ["redis (>3,<5.0.0)"]
+rediscluster = ["redis-py-cluster (>=2.0.0,<3)"]
+
+[[package]]
 name = "mccabe"
 version = "0.6.1"
 description = "McCabe checker, plugin for flake8"
@@ -595,7 +613,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4.0"
-content-hash = "18e65d3dc069318afdffbd5214ac2a96b8ad4df7e2a3e1fc9b721e414bd25548"
+content-hash = "0915975e04731cf83c3591c6cb27fa35a6329e3614746bf377e23ce7db611b85"
 
 [metadata.files]
 aiohttp = [
@@ -945,6 +963,10 @@ iniconfig = [
 isort = [
     {file = "isort-5.10.1-py3-none-any.whl", hash = "sha256:6f62d78e2f89b4500b080fe3a81690850cd254227f27f75c3a0c491a1f351ba7"},
     {file = "isort-5.10.1.tar.gz", hash = "sha256:e8443a5e7a020e9d7f97f1d7d9cd17c88bcb3bc7e218bf9cf5095fe550be2951"},
+]
+limits = [
+    {file = "limits-2.3.3-py3-none-any.whl", hash = "sha256:9ead6236a71eb1d9a18d7e3b1faa58d588ea3510e55514fae58babc0a3223986"},
+    {file = "limits-2.3.3.tar.gz", hash = "sha256:d4270d29591cc5eceab19be053455a4e619ba395062502bde2b5681af7dc1be8"},
 ]
 mccabe = [
     {file = "mccabe-0.6.1-py2.py3-none-any.whl", hash = "sha256:ab8a6258860da4b6677da4bd2fe5dc2c659cff31b3ee4f7f5d64e79735b80d42"},

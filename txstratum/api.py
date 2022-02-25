@@ -10,6 +10,7 @@ from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
 from hathorlib.exceptions import TxValidationError
 from structlog import get_logger
+from txstratum.rate_limiter import Limiter, get_default_keyfunc
 
 import txstratum.time
 from txstratum.exceptions import JobAlreadyExists, NewJobRefused
@@ -35,6 +36,8 @@ MAX_TIMESTAMP_DELTA: int = 300
 TX_TIMEOUT: float = 20.0
 
 logger = get_logger()
+
+limiter = Limiter()
 
 
 class App:
@@ -75,6 +78,7 @@ class App:
         """Return that the service is running."""
         return web.json_response({"success": True})
 
+    @limiter.limit(keyfunc=get_default_keyfunc("1/3"))
     async def mining_status(self, request: web.Request) -> web.Response:
         """Return status of miners."""
         return web.json_response(self.manager.status())
