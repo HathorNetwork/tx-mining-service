@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import TYPE_CHECKING, Coroutine, List, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, List, Optional
 
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
@@ -93,7 +93,17 @@ class App:
 
         self.fix_invalid_timestamp: bool = fix_invalid_timestamp
 
-    def rate_limit_wrapper(self, func: Coroutine, rate_limit: str) -> web.Response:
+    def rate_limit_wrapper(
+        self,
+        func: Callable[[web.Request], Coroutine[Any, Any, web.Response]],
+        rate_limit: str,
+    ) -> Callable[[web.Request], Awaitable[web.StreamResponse]]:
+        """Wrap one of the app routes with rate limiting.
+
+        :param func: The route to wrap.
+        :param rate_limit: The rate limit to apply.
+        :return: The wrapped route.
+        """
         if not self.rate_limiter:
             return func
 

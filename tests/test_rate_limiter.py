@@ -1,13 +1,6 @@
-from asyncore import loop
-
-import asynctest
+import asynctest  # type: ignore[import]
 from aiohttp import web
-from aiohttp.test_utils import (
-    AioHTTPTestCase,
-    TestClient,
-    TestServer,
-    unittest_run_loop,
-)
+from aiohttp.test_utils import TestClient, TestServer
 
 from txstratum.rate_limiter import MemoryLimiter, get_default_keyfunc
 
@@ -17,14 +10,15 @@ limiter = MemoryLimiter()
 class FakeApp:
     def __init__(self):
         self.app = web.Application()
-        self.app.router.add_get("/route", self.route)
+        self.app.router.add_get(
+            "/route", limiter.limit(keyfunc=get_default_keyfunc("1/3"))(self.route)
+        )
 
-    @limiter.limit(keyfunc=get_default_keyfunc("1/3"))
-    def route(self, request: web.Request) -> web.Response:
+    async def route(self, request: web.Request) -> web.Response:
         return web.json_response({"success": True})
 
 
-class RateLimiterTestCase(asynctest.ClockedTestCase):
+class RateLimiterTestCase(asynctest.ClockedTestCase):  # type: ignore[misc]
     def setUp(self):
         from tests.utils import Clock
 

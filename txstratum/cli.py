@@ -19,7 +19,7 @@ from txstratum.api import App
 from txstratum.filters import FileFilter, TOIFilter, TXFilter
 from txstratum.manager import TxMiningManager
 from txstratum.pubsub import PubSubManager
-from txstratum.rate_limiter import MemoryLimiter, RedisLimiter
+from txstratum.rate_limiter import MemoryLimiter, RateLimiter, RedisLimiter
 from txstratum.toi_client import TOIAsyncClient
 
 logger = get_logger()
@@ -159,6 +159,8 @@ class RunService:
             pubsub=self.pubsub,
             address=args.address,
         )
+
+        self.rate_limiter: Optional[RateLimiter] = None
 
     def configure_logging(self, args: Namespace) -> None:
         """Configure logging."""
