@@ -86,7 +86,7 @@ class TOIAsyncClient:
                 return CheckBlacklist(**r)
             body = await response.text()
             self.log.warning(
-                message="TOI Service unexpected response",
+                "TOI Service unexpected response",
                 status=response.status,
                 body=body,
             )
