@@ -75,12 +75,12 @@ class TOIAsyncClient:
         """Check if any of `tx_ids` and `addresses` are banned."""
         endpoint = self.endpoint("check/blacklist/v2")
         reasons = reasons or ["attack", "legal", "ban"]
-        body = {"reasons": reasons}
+        data = {"reasons": reasons}
         if tx_ids:
-            body["tx_ids"] = tx_ids
+            data["tx_ids"] = tx_ids
         if addresses:
-            body["addresses"] = addresses
-        async with self.session.post(endpoint, json=params) as response:
+            data["addresses"] = addresses
+        async with self.session.post(endpoint, json=data) as response:
             if response.status == 200:
                 r = await response.json()
                 return CheckBlacklist(**r)
