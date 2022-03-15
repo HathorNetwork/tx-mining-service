@@ -5,7 +5,7 @@
 
 [tool.poetry]
 name = "tx-mining-service"
-version = "0.2.0"
+version = "0.6.2"
 description = "Service to mine transactions"
 authors = ["Hathor Team <contact@hathor.network>"]
 license = "MIT"
@@ -14,7 +14,7 @@ homepage = "https://hathor.network/"
 repository = "https://github.com/HathorNetwork/tx-mining-service/"
 
 [tool.poetry.dependencies]
-python = ">=3.6,<4.0"
+python = ">=3.7,<4.0"
 ConfigArgParse = "^1.2.3"
 colorama = "^0.4.4"
 aiohttp = "^3.7.3"
@@ -35,7 +35,9 @@ numpy = "^1.19.4"
 pytest = "^6.2.1"
 pytest-aiohttp = "^0.3.0"
 pytest-cov = "^2.11.0"
+black = "^22.1.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+

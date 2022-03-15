@@ -14,8 +14,10 @@ import numpy.random  # type: ignore
 from txstratum.jobs import MinerBlockJob
 from txstratum.protocol import StratumProtocol, SubmittedWork
 
-BLOCK_DATA_1 = bytes.fromhex('000001ffffffe8b789180000001976a9147fd4ae0e4fb2d2854e76d359029d8078bb9'
-                             '9649e88ac40350000000000005e0f84a9000000000000000000000000000000278a7e')
+BLOCK_DATA_1 = bytes.fromhex(
+    "000001ffffffe8b789180000001976a9147fd4ae0e4fb2d2854e76d359029d8078bb9"
+    "9649e88ac40350000000000005e0f84a9000000000000000000000000000000278a7e"
+)
 
 
 class DifficultyTestCase(unittest.TestCase):
@@ -46,10 +48,10 @@ class DifficultyTestCase(unittest.TestCase):
         hashpower = 2**40
         for _ in range(200):
             weight = self.protocol.current_weight
-            geometric_p = 2**(-weight)
+            geometric_p = 2 ** (-weight)
             trials = numpy.random.geometric(geometric_p)
             dt = 1.0 * trials / hashpower
             self.protocol._submitted_work.append(SubmittedWork(now + dt, weight, dt))
             self.loop.run_until_complete(self.protocol.estimator_loop())
-            print('!! hashrate_ghs:', self.protocol.hashrate_ghs)
+            print("!! hashrate_ghs:", self.protocol.hashrate_ghs)
             now += dt

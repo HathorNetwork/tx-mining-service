@@ -51,22 +51,25 @@ flake8: $(py_sources) $(py_tests)
 isort-check: $(py_sources) $(py_tests)
 	isort --check-only $^
 
+.PHONY: black-check
+black-check:
+	black --check .
+
 .PHONY: check
-check: flake8 isort-check mypy
+check: flake8 black-check isort-check mypy
 
 # formatting:
 
 .PHONY: fmt
-fmt: yapf isort
+fmt: black isort
 
-.PHONY: yapf
-yapf: $(py_sources) $(py_tests)
-	echo "Skipping yapf because it's conflicting with flake8"
-#	yapf -rip $^ -e \*_pb2.py,\*_pb2_grpc.py
+.PHONY: black
+black:
+	black .
 
 .PHONY: isort
 isort: $(py_sources) $(py_tests)
-	isort -ac -rc $^
+	isort --ac $^
 
 # cleaning:
 

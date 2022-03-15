@@ -12,15 +12,15 @@ logger = get_logger()
 class TxMiningEvents(Enum):
     """Events that can be published to PubSub."""
 
-    MANAGER_TX_SOLVED = 'manager:tx_solved'
-    MANAGER_TX_TIMEOUT = 'manager:tx_timeout'
-    MANAGER_NEW_TX_JOB = 'manager:new_tx_job'
-    PROTOCOL_JOB_COMPLETED = 'protocol:job_completed'
-    PROTOCOL_MINER_SUBSCRIBED = 'protocol:miner_subcribed'
-    PROTOCOL_MINER_DISCONNECTED = 'protocol:miner_disconnected'
+    MANAGER_TX_SOLVED = "manager:tx_solved"
+    MANAGER_TX_TIMEOUT = "manager:tx_timeout"
+    MANAGER_NEW_TX_JOB = "manager:new_tx_job"
+    PROTOCOL_JOB_COMPLETED = "protocol:job_completed"
+    PROTOCOL_MINER_SUBSCRIBED = "protocol:miner_subcribed"
+    PROTOCOL_MINER_DISCONNECTED = "protocol:miner_disconnected"
 
 
-class PubSubManager():
+class PubSubManager:
     """Simple pub/sub implementation for asyncio."""
 
     def __init__(self, loop: asyncio.AbstractEventLoop):
@@ -30,9 +30,13 @@ class PubSubManager():
         """
         self.log = logger.new()
         self.loop = loop
-        self._subscribers: Dict[TxMiningEvents, List[Callable[[Any], Coroutine[Any, Any, Any]]]] = defaultdict(list)
+        self._subscribers: Dict[
+            TxMiningEvents, List[Callable[[Any], Coroutine[Any, Any, Any]]]
+        ] = defaultdict(list)
 
-    def subscribe(self, event: TxMiningEvents, callable: Callable[[Any], Coroutine[Any, Any, Any]]) -> None:
+    def subscribe(
+        self, event: TxMiningEvents, callable: Callable[[Any], Coroutine[Any, Any, Any]]
+    ) -> None:
         """Subscribe to an event.
 
         :param event: event to subscribe to
@@ -60,8 +64,8 @@ class PubSubManager():
 
         if exception:
             self.log.error(
-                'Exception when running PubSub subscriber',
+                "Exception when running PubSub subscriber",
                 traceback=traceback.format_exception(
                     None, exception, exception.__traceback__
-                )
+                ),
             )
