@@ -157,7 +157,8 @@ class App:
             self.manager.add_job(job)
         except JobAlreadyExists:
             self.log.debug("job-already-exists", data=data)
-            return web.json_response({"error": "job-already-exists"}, status=400)
+            running_job = self.manager.tx_jobs[job.uuid]
+            return web.json_response(running_job.to_dict())
         except NewJobRefused:
             self.log.debug("new-job-refused", data=data)
             return web.json_response({"error": "new-job-refused"}, status=503)
