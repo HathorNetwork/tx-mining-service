@@ -298,6 +298,34 @@ class AppTestCase(AioHTTPTestCase):
         self.assertEqual({"error": "job-not-found"}, data)
 
     @unittest_run_loop
+    async def test_submit_job_success_then_resubmit(self):
+        body = {"tx": update_timestamp(TX1_DATA).hex()}
+
+        resp = await self.client.request("POST", "/submit-job", json=body)
+        data1 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        resp = await self.client.request("POST", "/submit-job", json=body)
+        data2 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        # Submit the same job 2 times should return the data on the job both times
+        self.assertEqual(data1, data2)
+
+        resp = await self.client.request(
+            "GET", "/job-status", params={"job-id": data1["job_id"]}
+        )
+        data3 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        self.assertEqual(data1, data3)
+
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": data1["job_id"]}
+        )
+        self.assertEqual(200, resp.status)
+
+    @unittest_run_loop
     async def test_submit_job_success(self):
         resp = await self.client.request(
             "POST", "/submit-job", json={"tx": update_timestamp(TX1_DATA).hex()}
@@ -316,7 +344,6 @@ class AppTestCase(AioHTTPTestCase):
         resp = await self.client.request(
             "POST", "/cancel-job", params={"job-id": data1["job_id"]}
         )
-        data1 = await resp.json()
         self.assertEqual(200, resp.status)
 
     @unittest_run_loop
