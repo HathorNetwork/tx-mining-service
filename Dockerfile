@@ -16,6 +16,7 @@ RUN poetry config virtualenvs.create false \
 FROM python:3.9-alpine
 
 COPY --from=build /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+RUN apk add libgcc
 
 COPY txstratum/ ./txstratum
 COPY main.py log.conf ./
