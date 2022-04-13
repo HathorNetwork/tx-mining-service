@@ -148,6 +148,9 @@ class ManagerTestCase(unittest.TestCase):
         future = asyncio.ensure_future(_fn())
         self.loop.run_until_complete(future)
 
+    def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
+        return _get_ready_miner(self.manager, address)
+
     def test_invalid_mining_address(self):
         from hathorlib.exceptions import InvalidAddress
 
@@ -275,9 +278,6 @@ class ManagerTestCase(unittest.TestCase):
         conn.method_subscribe(params=params, msgid=None)
         conn.send_error.assert_not_called()
         transport.close.assert_not_called()
-
-    def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
-        return _get_ready_miner(self.manager, address)
 
     def test_miner_invalid_address(self):
         conn = StratumProtocol(self.manager)
@@ -821,6 +821,56 @@ class ManagerTestCase(unittest.TestCase):
 
         # Make sure the block submission was received
         self.assertEqual(len(conn._submitted_work), 1)
+
+    def test_error_when_pushing_block(self):
+        # Prepare HathorClient to raise exception
+        class BrokenHathorClient(HathorClientTest):
+            def __init__(self, server_url: str, api_version: str = "/v1a/"):
+                super().__init__(server_url, api_version)
+
+                self.pushes_attempted = 0
+
+            async def push_tx_or_block(self, raw: bytes) -> bool:
+                self.pushes_attempted += 1
+                raise RuntimeError('Error pushing block')
+
+        self.manager.backend = BrokenHathorClient(server_url="")
+
+        # Perform block submission
+        conn = self._get_ready_miner()
+        self.assertIsNotNone(conn.current_job)
+        self.assertTrue(conn.current_job.is_block)
+        self.assertEqual(0, conn.current_job.height)
+
+        block_job = conn.current_job
+
+        params = {
+            "job_id": block_job.uuid.hex(),
+            "nonce": "00000000000000000000000000278a7e",
+        }
+
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, "ok")
+
+        self._run_all_pending_events()
+
+        # Assertions
+        self.assertEqual(self.manager.backend.pushes_attempted, 1)
+
+        # Try to push block again
+        conn.send_result.reset_mock()
+        block_job.submitted_at = None
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, "ok")
+
+        self._run_all_pending_events()
+
+        # Assert that the push was really tried again
+        self.assertEqual(self.manager.backend.pushes_attempted, 2)
 
 
 class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
