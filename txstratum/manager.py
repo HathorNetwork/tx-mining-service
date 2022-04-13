@@ -165,50 +165,37 @@ class TxMiningManager:
         if sleep:
             await asyncio.sleep(sleep)
 
-        asyncio.ensure_future(
-            self.backend.push_tx_or_block(job.get_data())
-        ).add_done_callback(
-            lambda future: self.handle_submitted_solution(future, job)
-        )
-
-
-    def handle_submitted_solution(
-        self, future: asyncio.Future, job: MinerJob
-    ) -> None:
-        """Handles a response from the fullnode for a submitted job.
-           This is expected to be used as an asyncio callback with `add_done_callback` method.
-
-        :param future: The future for which this callback was called
-        :param job: The job originally holding the submitted block or transaction
-        """
-        if not future.exception():
+        try:
+            await self.backend.push_tx_or_block(job.get_data())
+        except RuntimeError:
             if job.is_block:
-                self.latest_submitted_block_height = job.height
-                # XXX Should we stop all other miners from mining?
-                asyncio.ensure_future(self.update_block_template())
-                self.log.info("Block found", job=job.uuid.hex())
-                self.blocks_found += 1
+                self.log.error(f"Error when submitting block", job=job)
             else:
-                self.log.info(
-                    "TxJob propagated", tx_job=tx_job.to_dict()
-                )
+                assert isinstance(job, MinerTxJob)
+                tx_job = job.tx_job
+                retry_count = tx_job.increase_propagation_retry_count()
+
+                if retry_count > self.MAX_RETRY_FOR_FAILED_PUSH_TX:
+                    self.log.error(f"Error when propagating tx_job; Giving up on retrying after {retry_count - 1} failed attempts", tx_job=tx_job.to_dict())
+                else:
+                    self.log.error(f"Error when propagating tx_job; Will try again in {self.RETRY_WAIT_FOR_FAILED_PUSH_TX} seconds..", tx_job=tx_job.to_dict())
+
+                    asyncio.ensure_future(self.push_job(job, sleep=self.RETRY_WAIT_FOR_FAILED_PUSH_TX))
 
             return
 
-        # Treat the error differently depending on whether it was a block or transaction
         if job.is_block:
-            self.log.error(f"Error when submitting block: {future.exception()}", job=job)
+            self.latest_submitted_block_height = job.height
+            # XXX Should we stop all other miners from mining?
+            asyncio.ensure_future(self.update_block_template())
+            self.log.info("Block found", job=job.uuid.hex())
+            self.blocks_found += 1
         else:
             assert isinstance(job, MinerTxJob)
-            tx_job = job.tx_job
-            retry_count = tx_job.increase_propagation_retry_count()
 
-            if retry_count > self.MAX_RETRY_FOR_FAILED_PUSH_TX:
-                self.log.error(f"Error when propagating tx_job: {future.exception()}; Giving up on retrying after {retry_count - 1} failed attempts", tx_job=tx_job.to_dict())
-            else:
-                self.log.error(f"Error when propagating tx_job: {future.exception()}; Will try again in {self.RETRY_WAIT_FOR_FAILED_PUSH_TX} seconds..", tx_job=tx_job.to_dict())
-
-                asyncio.ensure_future(self.push_job(job, sleep=self.RETRY_WAIT_FOR_FAILED_PUSH_TX))
+            self.log.info(
+                "TxJob propagated", tx_job=job.tx_job.to_dict()
+            )
 
     def submit_solution(
         self, protocol: StratumProtocol, job: MinerJob, nonce: bytes
