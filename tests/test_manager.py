@@ -409,6 +409,9 @@ class ManagerTestCase(unittest.TestCase):
         conn1.send_result = MagicMock(return_value=None)
         self.manager.backend.push_tx_or_block = MagicMock(return_value=asyncio.Future())
         conn1.method_submit(params=params, msgid=None)
+
+        self._run_all_pending_events()
+
         conn1.send_error.assert_not_called()
         conn1.send_result.assert_called_once_with(None, "ok")
         self.manager.backend.push_tx_or_block.assert_called_once()
@@ -419,6 +422,9 @@ class ManagerTestCase(unittest.TestCase):
         conn2.send_result = MagicMock(return_value=None)
         self.manager.backend.push_tx_or_block = MagicMock(return_value=asyncio.Future())
         conn2.method_submit(params=params, msgid=None)
+
+        self._run_all_pending_events()
+
         conn1.send_error.assert_not_called()
         conn1.send_result.assert_called_once_with(None, "ok")
         self.manager.backend.push_tx_or_block.assert_not_called()
@@ -456,6 +462,9 @@ class ManagerTestCase(unittest.TestCase):
         conn2.send_result = MagicMock(return_value=None)
         self.manager.backend.push_tx_or_block = MagicMock(return_value=asyncio.Future())
         conn2.method_submit(params=params2, msgid=None)
+
+        self._run_all_pending_events()
+
         conn1.send_error.assert_not_called()
         conn1.send_result.assert_called_once_with(None, "ok")
         self.manager.backend.push_tx_or_block.assert_not_called()
