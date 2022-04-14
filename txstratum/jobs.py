@@ -130,9 +130,9 @@ class TxJob:
         return self.started_at - self.created_at
 
     def increase_propagation_retry_count(self) -> int:
-        """Increase the number of times we tried to propagate this tx
+        """Increase the number of times we tried to propagate this tx.
 
-           Return the updated count
+        Return the updated count
         """
         self.propagation_retry_count += 1
         return self.propagation_retry_count

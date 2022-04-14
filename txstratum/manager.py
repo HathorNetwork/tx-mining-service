@@ -41,7 +41,7 @@ class TxMiningManager:
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
     MAX_RETRY_FOR_FAILED_PUSH_TX = 3
-    RETRY_WAIT_FOR_FAILED_PUSH_TX = 3 # seconds
+    RETRY_WAIT_FOR_FAILED_PUSH_TX = 3  # seconds
 
     def __init__(
         self,
@@ -157,7 +157,7 @@ class TxMiningManager:
         protocol.update_job(job, clean=clean)
 
     async def push_job(self, job: MinerJob, sleep: Optional[int] = None) -> None:
-        """Pushes a block or transaction to the fullnode
+        """Pushes a block or transaction to the fullnode.
 
         :param job: The MinerJob wrapping the block or transactions
         :param sleep: An optional sleep to force waiting some time before pushing, defaults to None
@@ -169,33 +169,45 @@ class TxMiningManager:
             await self.backend.push_tx_or_block(job.get_data())
         except RuntimeError:
             if job.is_block:
-                self.log.error(f"Error when submitting block", job=job)
+                self.log.error("Error when submitting block", job=job)
             else:
                 assert isinstance(job, MinerTxJob)
                 tx_job = job.tx_job
                 retry_count = tx_job.increase_propagation_retry_count()
 
                 if retry_count > self.MAX_RETRY_FOR_FAILED_PUSH_TX:
-                    self.log.error(f"Error when propagating tx_job; Giving up on retrying after {retry_count - 1} failed attempts", tx_job=tx_job.to_dict())
+                    self.log.error(
+                        (
+                            f"Error when propagating tx_job; "
+                            f"Giving up on retrying after {retry_count - 1} failed attempts"
+                        ),
+                        tx_job=tx_job.to_dict(),
+                    )
                 else:
-                    self.log.error(f"Error when propagating tx_job; Will try again in {self.RETRY_WAIT_FOR_FAILED_PUSH_TX} seconds..", tx_job=tx_job.to_dict())
+                    self.log.error(
+                        (
+                            f"Error when propagating tx_job; "
+                            f"Will try again in {self.RETRY_WAIT_FOR_FAILED_PUSH_TX} seconds.."
+                        ),
+                        tx_job=tx_job.to_dict(),
+                    )
 
-                    asyncio.ensure_future(self.push_job(job, sleep=self.RETRY_WAIT_FOR_FAILED_PUSH_TX))
+                    asyncio.ensure_future(
+                        self.push_job(job, sleep=self.RETRY_WAIT_FOR_FAILED_PUSH_TX)
+                    )
 
             return
 
-        if job.is_block:
+        if isinstance(job, MinerBlockJob):
             self.latest_submitted_block_height = job.height
             # XXX Should we stop all other miners from mining?
             asyncio.ensure_future(self.update_block_template())
             self.log.info("Block found", job=job.uuid.hex())
             self.blocks_found += 1
+        elif isinstance(job, MinerTxJob):
+            self.log.info("TxJob propagated", tx_job=job.tx_job.to_dict())
         else:
-            assert isinstance(job, MinerTxJob)
-
-            self.log.info(
-                "TxJob propagated", tx_job=job.tx_job.to_dict()
-            )
+            raise ValueError("Should never get to this point in the code")
 
     def submit_solution(
         self, protocol: StratumProtocol, job: MinerJob, nonce: bytes
@@ -205,7 +217,10 @@ class TxMiningManager:
             assert isinstance(job, MinerBlockJob)
             if job.height <= self.latest_submitted_block_height:
                 self.log.info(
-                    f"Ignoring submission of a block with height {job.height}, because we already submitted a block with height {self.latest_submitted_block_height}.",
+                    (
+                        f"Ignoring submission of a block with height {job.height}, "
+                        f"because we already submitted a block with height {self.latest_submitted_block_height}."
+                    ),
                     job=job,
                 )
                 return

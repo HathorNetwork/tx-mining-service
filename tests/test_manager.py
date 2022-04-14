@@ -841,7 +841,7 @@ class ManagerTestCase(unittest.TestCase):
 
             async def push_tx_or_block(self, raw: bytes) -> bool:
                 self.pushes_attempted += 1
-                raise RuntimeError('Error pushing block')
+                raise RuntimeError("Error pushing block")
 
         self.manager.backend = BrokenHathorClient(server_url="")
 
