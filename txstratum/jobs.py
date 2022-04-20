@@ -79,8 +79,6 @@ class TxJob:
         self._timeout_timer: Optional[TimerHandle] = None
         self._cleanup_timer: Optional[TimerHandle] = None
 
-        self.propagation_retry_count: int = 0
-
     def get_tx(self) -> BaseTransaction:
         """Return the Transaction object of this job."""
         return self._tx
@@ -103,6 +101,12 @@ class TxJob:
         self.timestamp = timestamp
         self.submitted_at = now
         self.total_time = now - self.created_at
+
+    def mark_as_failed(self, message) -> None:
+        """Mark job as failed."""
+
+        self.status = JobStatus.FAILED
+        self.message = message
 
     def get_header_without_nonce(self) -> bytes:
         """Return job's header without nonce."""
@@ -128,14 +132,6 @@ class TxJob:
         assert self.started_at is not None
 
         return self.started_at - self.created_at
-
-    def increase_propagation_retry_count(self) -> int:
-        """Increase the number of times we tried to propagate this tx.
-
-        Return the updated count
-        """
-        self.propagation_retry_count += 1
-        return self.propagation_retry_count
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dict with an overview of the job.

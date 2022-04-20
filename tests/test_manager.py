@@ -14,6 +14,7 @@ from unittest.mock import ANY, MagicMock, Mock
 import asynctest  # type: ignore
 import pytest
 from hathorlib.client import BlockTemplate, HathorClient
+from hathorlib.exceptions import PushTxFailed
 
 import txstratum.time
 from txstratum.exceptions import JobAlreadyExists
@@ -780,6 +781,9 @@ class ManagerTestCase(unittest.TestCase):
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
+
+        self._run_all_pending_events()
+
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, "ok")
 
@@ -841,7 +845,7 @@ class ManagerTestCase(unittest.TestCase):
 
             async def push_tx_or_block(self, raw: bytes) -> bool:
                 self.pushes_attempted += 1
-                raise RuntimeError("Error pushing block")
+                raise PushTxFailed("Error pushing block")
 
         self.manager.backend = BrokenHathorClient(server_url="")
 
@@ -881,6 +885,48 @@ class ManagerTestCase(unittest.TestCase):
         # Assert that the push was really tried again
         self.assertEqual(self.manager.backend.pushes_attempted, 2)
 
+    def test_error_when_pushing_tx(self):
+        # Prepare HathorClient to raise exception
+        class BrokenHathorClient(HathorClientTest):
+            def __init__(self, server_url: str, api_version: str = "/v1a/"):
+                super().__init__(server_url, api_version)
+
+                self.pushes_attempted = 0
+
+            async def push_tx_or_block(self, raw: bytes) -> bool:
+                self.pushes_attempted += 1
+                raise PushTxFailed("Error pushing block")
+
+        self.manager.backend = BrokenHathorClient(server_url="")
+
+        conn = self._get_ready_miner()
+
+        # Receive tx to mine
+        job = TxJob(TX1_DATA, propagate=True)
+        ret = self.manager.add_job(job)
+        self.assertFalse(conn.current_job.is_block)
+        self.assertEqual(conn.current_job.tx_job, job)
+        self.assertTrue(ret)
+
+        tx_job = conn.current_job.tx_job
+
+        # Perform tx submission
+        params = {
+            "job_id": conn.current_job.uuid.hex(),
+            "nonce": TX1_NONCE,
+        }
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, "ok")
+
+        self._run_all_pending_events()
+
+        # Assertions
+        self.assertEqual(self.manager.backend.pushes_attempted, 1)
+        self.assertEqual(tx_job.status, JobStatus.FAILED)
+
 
 class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
     def setUp(self):
@@ -905,6 +951,15 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
 
     def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
         return _get_ready_miner(self.manager, address)
+
+    async def _run_all_pending_events(self):
+        """Run all pending events."""
+        async def _fn():
+            pass
+
+        future = asyncio.ensure_future(_fn())
+
+        await future
 
     async def test_block_timestamp_update(self):
         job = self.manager.get_best_job(None)
@@ -1017,6 +1072,7 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
+        self._run_all_pending_events()
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, "ok")
 
@@ -1030,6 +1086,7 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
+        await self._run_all_pending_events()
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, "ok")
 
