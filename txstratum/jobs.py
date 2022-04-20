@@ -102,9 +102,8 @@ class TxJob:
         self.submitted_at = now
         self.total_time = now - self.created_at
 
-    def mark_as_failed(self, message) -> None:
+    def mark_as_failed(self, message: str) -> None:
         """Mark job as failed."""
-
         self.status = JobStatus.FAILED
         self.message = message
 

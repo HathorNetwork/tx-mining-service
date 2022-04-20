@@ -6,8 +6,8 @@ import asyncio
 from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
-from hathorlib.utils import decode_address
 from hathorlib.exceptions import PushTxFailed
+from hathorlib.utils import decode_address
 from structlog import get_logger
 
 import txstratum.time
@@ -154,7 +154,7 @@ class TxMiningManager:
 
         protocol.update_job(job, clean=clean)
 
-    async def push_block_job(self, job: MinerBlockJob):
+    async def _push_block_job(self, job: MinerBlockJob) -> None:
         """Pushes a block to the fullnode.
 
         :param job: The MinerBlockJob wrapping the block
@@ -173,7 +173,7 @@ class TxMiningManager:
         self.log.info("Block found", job=job.uuid.hex())
         self.blocks_found += 1
 
-    async def push_tx_job(self, job: MinerTxJob) -> None:
+    async def _push_tx_job(self, job: MinerTxJob) -> None:
         """Pushes a tx to the fullnode.
 
         :param job: The MinerTxJob wrapping the tx
@@ -185,7 +185,7 @@ class TxMiningManager:
             tx_job = job.tx_job
 
             self.log.error(
-                f"Error when propagating tx_job; ",
+                "Error when propagating tx_job",
                 tx_job=tx_job.to_dict(),
             )
 
@@ -193,9 +193,8 @@ class TxMiningManager:
 
         self.log.info("TxJob propagated", tx_job=job.tx_job.to_dict())
 
-    async def submit_block_solution(
-        self, job: MinerBlockJob
-    ) -> None:
+    async def _submit_block_solution(self, job: MinerBlockJob) -> None:
+        """Sumbit a new solution for a block job."""
         assert isinstance(job, MinerBlockJob)
 
         if job.height <= self.latest_submitted_block_height:
@@ -208,11 +207,12 @@ class TxMiningManager:
             )
             return
 
-        await self.push_block_job(job)
+        await self._push_block_job(job)
 
-    async def submit_tx_solution(
+    async def _submit_tx_solution(
         self, protocol: StratumProtocol, job: MinerTxJob, nonce: bytes
     ) -> None:
+        """Sumbit a new solution for a tx job."""
         tx_job = job.tx_job
 
         if tx_job.status in JobStatus.get_after_mining_states():
@@ -240,8 +240,8 @@ class TxMiningManager:
 
         if tx_job.propagate:
             try:
-                await self.push_tx_job(job)
-            except:
+                await self._push_tx_job(job)
+            except PushTxFailed:
                 tx_job.mark_as_failed("Error when propagating the transaction")
                 return
 
@@ -261,9 +261,9 @@ class TxMiningManager:
     ) -> None:
         """Submit a new solution for a job. It is called by StratumProtocol."""
         if isinstance(job, MinerBlockJob):
-            asyncio.ensure_future(self.submit_block_solution(job))
+            asyncio.ensure_future(self._submit_block_solution(job))
         elif isinstance(job, MinerTxJob):
-            asyncio.ensure_future(self.submit_tx_solution(protocol, job, nonce))
+            asyncio.ensure_future(self._submit_tx_solution(protocol, job, nonce))
         else:
             raise ValueError("Should never get to this point")
 
