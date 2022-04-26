@@ -14,6 +14,7 @@ from unittest.mock import ANY, MagicMock, Mock
 import asynctest  # type: ignore
 import pytest
 from hathorlib.client import BlockTemplate, HathorClient
+from hathorlib.exceptions import PushTxFailed
 
 import txstratum.time
 from txstratum.exceptions import JobAlreadyExists
@@ -148,6 +149,9 @@ class ManagerTestCase(unittest.TestCase):
         future = asyncio.ensure_future(_fn())
         self.loop.run_until_complete(future)
 
+    def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
+        return _get_ready_miner(self.manager, address)
+
     def test_invalid_mining_address(self):
         from hathorlib.exceptions import InvalidAddress
 
@@ -275,9 +279,6 @@ class ManagerTestCase(unittest.TestCase):
         conn.method_subscribe(params=params, msgid=None)
         conn.send_error.assert_not_called()
         transport.close.assert_not_called()
-
-    def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
-        return _get_ready_miner(self.manager, address)
 
     def test_miner_invalid_address(self):
         conn = StratumProtocol(self.manager)
@@ -409,6 +410,9 @@ class ManagerTestCase(unittest.TestCase):
         conn1.send_result = MagicMock(return_value=None)
         self.manager.backend.push_tx_or_block = MagicMock(return_value=asyncio.Future())
         conn1.method_submit(params=params, msgid=None)
+
+        self._run_all_pending_events()
+
         conn1.send_error.assert_not_called()
         conn1.send_result.assert_called_once_with(None, "ok")
         self.manager.backend.push_tx_or_block.assert_called_once()
@@ -419,6 +423,9 @@ class ManagerTestCase(unittest.TestCase):
         conn2.send_result = MagicMock(return_value=None)
         self.manager.backend.push_tx_or_block = MagicMock(return_value=asyncio.Future())
         conn2.method_submit(params=params, msgid=None)
+
+        self._run_all_pending_events()
+
         conn1.send_error.assert_not_called()
         conn1.send_result.assert_called_once_with(None, "ok")
         self.manager.backend.push_tx_or_block.assert_not_called()
@@ -456,6 +463,9 @@ class ManagerTestCase(unittest.TestCase):
         conn2.send_result = MagicMock(return_value=None)
         self.manager.backend.push_tx_or_block = MagicMock(return_value=asyncio.Future())
         conn2.method_submit(params=params2, msgid=None)
+
+        self._run_all_pending_events()
+
         conn1.send_error.assert_not_called()
         conn1.send_result.assert_called_once_with(None, "ok")
         self.manager.backend.push_tx_or_block.assert_not_called()
@@ -771,6 +781,9 @@ class ManagerTestCase(unittest.TestCase):
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
+
+        self._run_all_pending_events()
+
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, "ok")
 
@@ -822,6 +835,98 @@ class ManagerTestCase(unittest.TestCase):
         # Make sure the block submission was received
         self.assertEqual(len(conn._submitted_work), 1)
 
+    def test_error_when_pushing_block(self):
+        # Prepare HathorClient to raise exception
+        class BrokenHathorClient(HathorClientTest):
+            def __init__(self, server_url: str, api_version: str = "/v1a/"):
+                super().__init__(server_url, api_version)
+
+                self.pushes_attempted = 0
+
+            async def push_tx_or_block(self, raw: bytes) -> bool:
+                self.pushes_attempted += 1
+                raise PushTxFailed("Error pushing block")
+
+        self.manager.backend = BrokenHathorClient(server_url="")
+
+        # Perform block submission
+        conn = self._get_ready_miner()
+        self.assertIsNotNone(conn.current_job)
+        self.assertTrue(conn.current_job.is_block)
+        self.assertEqual(0, conn.current_job.height)
+
+        block_job = conn.current_job
+
+        params = {
+            "job_id": block_job.uuid.hex(),
+            "nonce": "00000000000000000000000000278a7e",
+        }
+
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, "ok")
+
+        self._run_all_pending_events()
+
+        # Assertions
+        self.assertEqual(self.manager.backend.pushes_attempted, 1)
+
+        # Try to push block again
+        conn.send_result.reset_mock()
+        block_job.submitted_at = None
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, "ok")
+
+        self._run_all_pending_events()
+
+        # Assert that the push was really tried again
+        self.assertEqual(self.manager.backend.pushes_attempted, 2)
+
+    def test_error_when_pushing_tx(self):
+        # Prepare HathorClient to raise exception
+        class BrokenHathorClient(HathorClientTest):
+            def __init__(self, server_url: str, api_version: str = "/v1a/"):
+                super().__init__(server_url, api_version)
+
+                self.pushes_attempted = 0
+
+            async def push_tx_or_block(self, raw: bytes) -> bool:
+                self.pushes_attempted += 1
+                raise PushTxFailed("Error pushing block")
+
+        self.manager.backend = BrokenHathorClient(server_url="")
+
+        conn = self._get_ready_miner()
+
+        # Receive tx to mine
+        job = TxJob(TX1_DATA, propagate=True)
+        ret = self.manager.add_job(job)
+        self.assertFalse(conn.current_job.is_block)
+        self.assertEqual(conn.current_job.tx_job, job)
+        self.assertTrue(ret)
+
+        tx_job = conn.current_job.tx_job
+
+        # Perform tx submission
+        params = {
+            "job_id": conn.current_job.uuid.hex(),
+            "nonce": TX1_NONCE,
+        }
+        conn.send_error = MagicMock(return_value=None)
+        conn.send_result = MagicMock(return_value=None)
+        conn.method_submit(params=params, msgid=None)
+        conn.send_error.assert_not_called()
+        conn.send_result.assert_called_once_with(None, "ok")
+
+        self._run_all_pending_events()
+
+        # Assertions
+        self.assertEqual(self.manager.backend.pushes_attempted, 1)
+        self.assertEqual(tx_job.status, JobStatus.FAILED)
+
 
 class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
     def setUp(self):
@@ -846,6 +951,16 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
 
     def _get_ready_miner(self, address: Optional[str] = None) -> StratumProtocol:
         return _get_ready_miner(self.manager, address)
+
+    async def _run_all_pending_events(self):
+        """Run all pending events."""
+
+        async def _fn():
+            pass
+
+        future = asyncio.ensure_future(_fn())
+
+        await future
 
     async def test_block_timestamp_update(self):
         job = self.manager.get_best_job(None)
@@ -958,6 +1073,7 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
+        await self._run_all_pending_events()
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, "ok")
 
@@ -971,6 +1087,7 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
+        await self._run_all_pending_events()
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, "ok")
 

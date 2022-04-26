@@ -102,6 +102,11 @@ class TxJob:
         self.submitted_at = now
         self.total_time = now - self.created_at
 
+    def mark_as_failed(self, message: str) -> None:
+        """Mark job as failed."""
+        self.status = JobStatus.FAILED
+        self.message = message
+
     def get_header_without_nonce(self) -> bytes:
         """Return job's header without nonce."""
         return self._tx.get_header_without_nonce()
