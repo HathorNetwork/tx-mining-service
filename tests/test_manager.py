@@ -1073,7 +1073,7 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         conn.send_error = MagicMock(return_value=None)
         conn.send_result = MagicMock(return_value=None)
         conn.method_submit(params=params, msgid=None)
-        self._run_all_pending_events()
+        await self._run_all_pending_events()
         conn.send_error.assert_not_called()
         conn.send_result.assert_called_once_with(None, "ok")
 
