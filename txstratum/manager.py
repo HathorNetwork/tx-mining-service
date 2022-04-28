@@ -6,6 +6,7 @@ import asyncio
 from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
+from hathorlib.exceptions import PushTxFailed
 from hathorlib.utils import decode_address
 from structlog import get_logger
 
@@ -153,58 +154,118 @@ class TxMiningManager:
 
         protocol.update_job(job, clean=clean)
 
+    async def _push_block_job(self, job: MinerBlockJob) -> None:
+        """Pushes a block to the fullnode.
+
+        :param job: The MinerBlockJob wrapping the block
+        """
+        assert isinstance(job, MinerBlockJob)
+
+        try:
+            await self.backend.push_tx_or_block(job.get_data())
+        except PushTxFailed:
+            self.log.error("Error when submitting block", job=job)
+            return
+
+        self.latest_submitted_block_height = job.height
+        # XXX Should we stop all other miners from mining?
+        asyncio.ensure_future(self.update_block_template())
+        self.log.info("Block found", job=job.uuid.hex())
+        self.blocks_found += 1
+
+    async def _push_tx_job(self, job: MinerTxJob) -> None:
+        """Pushes a tx to the fullnode.
+
+        :param job: The MinerTxJob wrapping the tx
+        """
+        try:
+            await self.backend.push_tx_or_block(job.get_data())
+        except PushTxFailed:
+            assert isinstance(job, MinerTxJob)
+            tx_job = job.tx_job
+
+            self.log.error(
+                "Error when propagating tx_job",
+                tx_job=tx_job.to_dict(),
+            )
+
+            raise
+
+        self.log.info("TxJob propagated", tx_job=job.tx_job.to_dict())
+
+    async def _submit_block_solution(self, job: MinerBlockJob) -> None:
+        """Sumbit a new solution for a block job."""
+        assert isinstance(job, MinerBlockJob)
+
+        if job.height <= self.latest_submitted_block_height:
+            self.log.info(
+                (
+                    f"Ignoring submission of a block with height {job.height}, "
+                    f"because we already submitted a block with height {self.latest_submitted_block_height}."
+                ),
+                job=job,
+            )
+            return
+
+        await self._push_block_job(job)
+
+    async def _submit_tx_solution(
+        self, protocol: StratumProtocol, job: MinerTxJob, nonce: bytes
+    ) -> None:
+        """Sumbit a new solution for a tx job."""
+        tx_job = job.tx_job
+
+        if tx_job.status in JobStatus.get_after_mining_states():
+            # This can happen if two miners submitted a solution to the same job, for instance
+            self.log.debug(
+                f"Received solution for a job with status {tx_job.status}",
+                job_id=tx_job.uuid.hex(),
+            )
+            return
+
+        try:
+            # Remove from queue.
+            self.tx_queue.remove(tx_job)
+        except ValueError:
+            self.log.warning(
+                "Tried removing a job that was not in the queue.",
+                job_id=tx_job.uuid.hex(),
+            )
+
+        # Schedule to clean it up.
+        self.schedule_job_clean_up(tx_job)
+
+        # Mark as solved, stop mining it, and propagate if requested.
+        self.stop_mining_tx(tx_job)
+
+        if tx_job.propagate:
+            try:
+                await self._push_tx_job(job)
+            except PushTxFailed:
+                tx_job.mark_as_failed("Error when propagating the transaction")
+                return
+
+        tx_job.mark_as_solved(nonce=nonce, timestamp=job.get_object().timestamp)
+        self.txs_solved += 1
+
+        self.log.info(
+            "TxJob solved", propagate=tx_job.propagate, tx_job=tx_job.to_dict()
+        )
+        self.pubsub.emit(
+            TxMiningEvents.MANAGER_TX_SOLVED,
+            {"tx_job": tx_job, "protocol": protocol},
+        )
+
     def submit_solution(
         self, protocol: StratumProtocol, job: MinerJob, nonce: bytes
     ) -> None:
         """Submit a new solution for a job. It is called by StratumProtocol."""
-        if job.is_block:
-            assert isinstance(job, MinerBlockJob)
-            if job.height <= self.latest_submitted_block_height:
-                return
-            self.latest_submitted_block_height = job.height
-            asyncio.ensure_future(self.backend.push_tx_or_block(job.get_data()))
-            # XXX Should we stop all other miners from mining?
-            asyncio.ensure_future(self.update_block_template())
-            self.log.info("Block found", job=job.uuid.hex())
-            self.blocks_found += 1
-
+        if isinstance(job, MinerBlockJob):
+            asyncio.ensure_future(self._submit_block_solution(job))
+        elif isinstance(job, MinerTxJob):
+            asyncio.ensure_future(self._submit_tx_solution(protocol, job, nonce))
         else:
-            assert isinstance(job, MinerTxJob)
-            tx_job = job.tx_job
-
-            if tx_job.status in JobStatus.get_after_mining_states():
-                # This can happen if two miners submitted a solution to the same job, for instance
-                self.log.debug(
-                    f"Received solution for a job with status {tx_job.status}",
-                    job_id=tx_job.uuid.hex(),
-                )
-                return
-
-            try:
-                # Remove from queue.
-                self.tx_queue.remove(tx_job)
-            except ValueError:
-                self.log.warning(
-                    "Tried removing a job that was not in the queue.",
-                    job_id=tx_job.uuid.hex(),
-                )
-
-            # Schedule to clean it up.
-            self.schedule_job_clean_up(tx_job)
-            # Mark as solved, stop mining it, and propagate if requested.
-            tx_job.mark_as_solved(nonce=nonce, timestamp=job.get_object().timestamp)
-            self.stop_mining_tx(tx_job)
-            if tx_job.propagate:
-                tx_bytes = bytes(tx_job.get_tx())
-                asyncio.ensure_future(self.backend.push_tx_or_block(tx_bytes))
-            self.log.info(
-                "TxJob solved", propagate=tx_job.propagate, tx_job=tx_job.to_dict()
-            )
-            self.txs_solved += 1
-            self.pubsub.emit(
-                TxMiningEvents.MANAGER_TX_SOLVED,
-                {"tx_job": tx_job, "protocol": protocol},
-            )
+            raise ValueError("Should never get to this point")
 
     def schedule_job_timeout(self, job: TxJob) -> None:
         """Schedule to have a TxJob marked as timeout."""
@@ -313,8 +374,7 @@ class TxMiningManager:
         try:
             parents: List[bytes] = await self.backend.get_tx_parents()
         except Exception as e:
-            job.status = JobStatus.FAILED
-            job.message = "Unhandled exception: {}".format(e)
+            job.mark_as_failed("Unhandled exception: {}".format(e))
             # Schedule to clean it up.
             self.schedule_job_clean_up(job)
         else:

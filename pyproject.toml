@@ -5,7 +5,7 @@
 
 [tool.poetry]
 name = "tx-mining-service"
-version = "0.6.4"
+version = "0.7.0"
 description = "Service to mine transactions"
 authors = ["Hathor Team <contact@hathor.network>"]
 license = "MIT"
@@ -23,7 +23,7 @@ structlog = "^20.2.0"
 prometheus-client = "^0.9.0"
 idna_ssl = "^1.1.0"
 asynctest = "^0.13.0"
-hathorlib = {version = "^0.1.1", extras = ["client"]}
+hathorlib = {version = "^0.2.0", extras = ["client"]}
 dataclasses = {version = "^0.8", python = ">=3.6,<3.7"}
 
 [tool.poetry.dev-dependencies]

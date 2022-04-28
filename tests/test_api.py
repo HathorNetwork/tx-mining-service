@@ -60,6 +60,55 @@ NFT_CREATION_TX_DATA = bytes.fromhex(
     "33b2d88d6802f7"
 )
 
+# Transactions with more than 25 data script outputs are non standard, then won't be mined
+# https://explorer.testnet.hathor.network/transaction/00b3b43c65391174b5e511bb22b13f8ef41153c43d27e25856ba18accc4f0f3c
+TX_SCRIPT_DATA1 = bytes.fromhex(
+    "000100010100c950858dc5810a27aad1f250180168a99b41fee85653f8c851d07f185f2806010069"
+    "46304402207bbb082b356be305f5bedb1f9b21eeafeeca1c883ec6381727000f8e87787c7d022067"
+    "a369bf23483cd19dfd73a0941bb3f016fbb4e0bbdfcbb5ee0240749158018f21021ec04599966661"
+    "176f5e6185a7850c931464cebe6459c58a2a11a79beebd55e8000000010000060474657374ac4020"
+    "0000218def41626699e50200208301f5b8cf2c953d5114725a3a67ab643af44be250e462f0a422f7"
+    "76783500eaff578d1c9bb38e1b8f4dee123130f82b22c8687c5c30b5a63e45d76e9ef400000150"
+)
+
+# https://explorer.testnet.hathor.network/transaction/004027a2971cee57b98ecefbfa15247d214a56d6a5e9d90e7794e8e853664f90
+TX_SCRIPT_DATA25 = bytes.fromhex(
+    "000100011a001d5805e6c5129adc7099a29ac23d15541393d281fca29ec36222efb5f934ad00006a"
+    "473045022100b9329f099d1ac7bc191fe0102d7397be9b5f56308c04a25420422f783817f1a40220"
+    "190d9c91f7d17b62b0fb247f0282740e68f472ee54ce7708694a2664f3153cac2103ecacef4a15a3"
+    "818c2c70a0f8784f02fed566192f855f06b9f062020ceab91a98000000010000060474657374ac00"
+    "0000010000060474657374ac000000010000060474657374ac000000010000060474657374ac0000"
+    "00010000060474657374ac000000010000060474657374ac000000010000060474657374ac000000"
+    "010000060474657374ac000000010000060474657374ac000000010000060474657374ac00000001"
+    "0000060474657374ac000000010000060474657374ac000000010000060474657374ac0000000100"
+    "00060474657374ac000000010000060474657374ac000000010000060474657374ac000000010000"
+    "060474657374ac000000010000060474657374ac000000010000060474657374ac00000001000006"
+    "0474657374ac000000010000060474657374ac000000010000060474657374ac0000000100000604"
+    "74657374ac000000010000060474657374ac000000010000060474657374ac0000001000001976a9"
+    "149e2cd235e1cd2a4fac3cb2394b9806403cf1862f88ac40200000218def4162669a100200b3b43c"
+    "65391174b5e511bb22b13f8ef41153c43d27e25856ba18accc4f0f3c00208301f5b8cf2c953d5114"
+    "725a3a67ab643af44be250e462f0a422f77678350000004f"
+)
+
+# https://explorer.testnet.hathor.network/transaction/00204c174e1011a4264b7c930e434da9af3dfe01442876a0590ec6cbb97a8597
+TX_SCRIPT_DATA26 = bytes.fromhex(
+    "000100011b00933e98cf9975a0d7850af4a49a14848c351929ca4ef22996da9f0215779e6401006a"
+    "47304502210099736f4048a6eef587e42d37b063adad3b9b6a53399e6f3636cfb8ee364fa5f30220"
+    "4c16776f07fdf65cee38120f41f2466c7b723efa0fcd06eca73b6c4b49d54e5b2103a2b3d37f580e"
+    "f4f04a8b22c7613d570d9431d9d4ad1a0fe99c80da8b56ce806c000000010000060474657374ac00"
+    "0000010000060474657374ac000000010000060474657374ac000000010000060474657374ac0000"
+    "00010000060474657374ac000000010000060474657374ac000002ba00001976a914b33763a9c9ea"
+    "227e5c0ffaad6729128a6d293f7688ac000000010000060474657374ac0000000100000604746573"
+    "74ac000000010000060474657374ac000000010000060474657374ac000000010000060474657374"
+    "ac000000010000060474657374ac000000010000060474657374ac000000010000060474657374ac"
+    "000000010000060474657374ac000000010000060474657374ac000000010000060474657374ac00"
+    "0000010000060474657374ac000000010000060474657374ac000000010000060474657374ac0000"
+    "00010000060474657374ac000000010000060474657374ac000000010000060474657374ac000000"
+    "010000060474657374ac000000010000060474657374ac000000010000060474657374ac40200000"
+    "218def416266af4302004027a2971cee57b98ecefbfa15247d214a56d6a5e9d90e7794e8e853664f"
+    "9000b3b43c65391174b5e511bb22b13f8ef41153c43d27e25856ba18accc4f0f3c00000083"
+)
+
 
 def update_timestamp(tx_bytes: bytes, *, delta: int = 0) -> bytes:
     """Update timestamp to current timestamp."""
@@ -387,3 +436,53 @@ class AppTestCase(AioHTTPTestCase):
         )
         data1 = await resp.json()
         self.assertEqual(200, resp.status)
+
+    @unittest_run_loop
+    async def test_submit_job_success_script_data1(self):
+        tx_hex = update_timestamp(TX_SCRIPT_DATA1).hex()
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex})
+        data1 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        resp = await self.client.request(
+            "GET", "/job-status", params={"job-id": data1["job_id"]}
+        )
+        data2 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        self.assertEqual(data1, data2)
+
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": data1["job_id"]}
+        )
+        data1 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+    @unittest_run_loop
+    async def test_submit_job_success_script_data25(self):
+        tx_hex = update_timestamp(TX_SCRIPT_DATA25).hex()
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex})
+        data1 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        resp = await self.client.request(
+            "GET", "/job-status", params={"job-id": data1["job_id"]}
+        )
+        data2 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+        self.assertEqual(data1, data2)
+
+        resp = await self.client.request(
+            "POST", "/cancel-job", params={"job-id": data1["job_id"]}
+        )
+        data1 = await resp.json()
+        self.assertEqual(200, resp.status)
+
+    @unittest_run_loop
+    async def test_submit_job_fail_script_data26_non_standard(self):
+        tx_hex = update_timestamp(TX_SCRIPT_DATA26).hex()
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex})
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({"error": "non-standard-tx"}, data)
