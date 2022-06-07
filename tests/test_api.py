@@ -123,11 +123,9 @@ def get_timestamp(tx_bytes: bytes) -> int:
     return tx.timestamp
 
 
-class AppTestCase(AioHTTPTestCase):
-    async def get_application(self):
-        self.manager = TxMiningManager(backend=None, pubsub=MagicMock(), address=None)
-        self.myapp = App(self.manager)
-        return self.myapp.app
+class BaseAppTestCase(AioHTTPTestCase):
+    __test__ = False
+    version_check: bool
 
     @unittest_run_loop
     async def test_health_check(self):
@@ -486,3 +484,134 @@ class AppTestCase(AioHTTPTestCase):
         data = await resp.json()
         self.assertEqual(400, resp.status)
         self.assertEqual({"error": "non-standard-tx"}, data)
+
+    @unittest_run_loop
+    async def test_check_wallet_version(self):
+        tx_hex = update_timestamp(TX_SCRIPT_DATA25).hex()
+
+        header_desktop_lower = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HathorWallet/0.22.1 Chrome/73.0.3683.121 Electron/5.0.13 Safari/537.36 HathorWallet/0.22.1"
+        }
+        header_desktop_equal = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HathorWallet/0.23.0 Chrome/73.0.3683.121 Electron/5.0.13 Safari/537.36 HathorWallet/0.23.0"
+        }
+        header_desktop_higher = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HathorWallet/0.23.1 Chrome/73.0.3683.121 Electron/5.0.13 Safari/537.36 HathorWallet/0.23.1"
+        }
+
+        # Success with desktop version higher than the minimum
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_desktop_higher)
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+        # Success with desktop version equal to the minimum
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_desktop_equal)
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+        # Error with desktop version lower than the minimum if the app is validating desktop version
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_desktop_lower)
+        data = await resp.json()
+        if self.version_check:
+            self.assertEqual(400, resp.status)
+            self.assertEqual({"error": "wallet-version-invalid"}, data)
+        else:
+            self.assertEqual(200, resp.status)
+
+        header_mobile_lower = {
+            "User-Agent": "Hathor Wallet Mobile / 0.18.0"
+        }
+        header_mobile_equal = {
+            "User-Agent": "Hathor Wallet Mobile / 1.18.3"
+        }
+        header_mobile_higher = {
+            "User-Agent": "Hathor Wallet Mobile / 20.1.0"
+        }
+        header_mobile_custom = {
+            "User-Agent": "HathorMobile/1"
+        }
+        header_mobile_custom_wrong = {
+            "User-Agent": "HathorMobile/2"
+        }
+
+        # Success with mobile version higher than the minimum
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_mobile_higher)
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+        # Success with mobile version equal to the minimum
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_mobile_equal)
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+        # Error with mobile version lower than the minimum if the app is validating mobile version
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_mobile_lower)
+        data = await resp.json()
+        if self.version_check:
+            self.assertEqual(400, resp.status)
+            self.assertEqual({"error": "wallet-version-invalid"}, data)
+        else:
+            self.assertEqual(200, resp.status)
+
+        # Error with mobile version before v0.18.0, if the app is validating mobile version
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_mobile_custom)
+        data = await resp.json()
+        if self.version_check:
+            self.assertEqual(400, resp.status)
+            self.assertEqual({"error": "wallet-version-invalid"}, data)
+        else:
+            self.assertEqual(200, resp.status)
+
+        # Success if the custom is different than expected
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_mobile_custom_wrong)
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+
+        header_headless_lower = {
+            "User-Agent": "Hathor Wallet Headless / 0.14.87"
+        }
+        header_headless_equal = {
+            "User-Agent": "Hathor Wallet Headless / 0.14.88"
+        }
+        header_headless_higher = {
+            "User-Agent": "Hathor Wallet Headless / 0.14.89"
+        }
+
+        # Success with headless version higher than the minimum
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_headless_higher)
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+        # Success with headless version equal to the minimum
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_headless_equal)
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+        # Error with headless version lower than the minimum if the app is validating headless version
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex}, headers=header_headless_lower)
+        data = await resp.json()
+        if self.version_check:
+            self.assertEqual(400, resp.status)
+            self.assertEqual({"error": "wallet-version-invalid"}, data)
+        else:
+            self.assertEqual(200, resp.status)
+
+
+class AppTestCase(BaseAppTestCase):
+    __test__ = True
+
+    async def get_application(self):
+        self.manager = TxMiningManager(backend=None, pubsub=MagicMock(), address=None)
+        self.myapp = App(self.manager)
+        self.version_check = False
+        return self.myapp.app
+
+class AppVersionCheckTestCase(BaseAppTestCase):
+    __test__ = True
+
+    async def get_application(self):
+        self.manager = TxMiningManager(backend=None, pubsub=MagicMock(), address=None)
+        self.myapp = App(self.manager, min_wallet_desktop_version="0.23.0", min_wallet_mobile_version="1.18.3", min_wallet_headless_version="0.14.88")
+        self.version_check = True
+        return self.myapp.app
