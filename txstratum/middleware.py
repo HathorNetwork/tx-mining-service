@@ -4,27 +4,33 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 from aiohttp import web
-from pkg_resources import packaging
+from aiohttp.typedefs import Handler
 
-handler_callable = Callable[[web.Request], web.Response]
+from txstratum.utils import is_version_gte
+
+Middleware = Callable[[web.Request, Handler], Awaitable[web.StreamResponse]]
 
 
 def create_middleware_version_check(
     min_wallet_desktop_version: Optional[str],
     min_wallet_mobile_version: Optional[str],
     min_wallet_headless_version: Optional[str],
-) -> Callable[[web.Request, handler_callable], web.Response]:
+) -> Middleware:
     """Middleware factory."""
 
     @web.middleware
     async def version_check(
-        request: web.Request, handler: handler_callable
-    ) -> web.Response:
+        request: web.Request, handler: Handler
+    ) -> web.StreamResponse:
         """Check wallet versions from user agent."""
         user_agent = request.headers.get("User-Agent")
+
+        if not user_agent:
+            response = await handler(request)
+            return response
 
         if min_wallet_desktop_version:
             # Search user agent for wallet desktop string and get version
@@ -56,9 +62,7 @@ def create_middleware_version_check(
             # Before version 0.18.0 in the wallet mobile, the user agent was receiving a fixed "version"
             # the user agent was "HathorMobile/1", so if the min version is at least 0.18.0, then
             # we must have a custom check here for it
-            if packaging.version.parse(
-                min_wallet_mobile_version
-            ) >= packaging.version.parse("0.18.0"):
+            if is_version_gte(min_wallet_mobile_version, "0.18.0"):
                 custom_regex = "HathorMobile/1"
                 search = re.search(custom_regex, user_agent)
                 if search:
@@ -80,7 +84,8 @@ def create_middleware_version_check(
                     {"error": "wallet-version-invalid"}, status=400
                 )
 
-        return await handler(request)
+        response = await handler(request)
+        return response
 
     return version_check
 
@@ -93,6 +98,6 @@ def is_version_invalid(regex: str, user_agent: str, min_version: str) -> bool:
     search = re.search(regex, user_agent)
     if search and search.groups():
         version = search.groups()[0]
-        return packaging.version.parse(version) < packaging.version.parse(min_version)
+        return not is_version_gte(version, min_version)
 
     return False

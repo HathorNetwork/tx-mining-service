@@ -404,3 +404,23 @@ def start_logging(loop: Optional["AbstractEventLoop"] = None) -> None:
         logger.exception(message, **extra, exc_info=exc_info)
 
     loop.set_exception_handler(_exception_handler)
+
+
+def is_version_gte(version: str, base_version: str) -> bool:
+    """Compare two versions in the format X.Y.Z.
+
+    Validates if version is greater than or equal to base_version
+    """
+    version_split = version.split(".")
+    base_version_split = base_version.split(".")
+
+    assert len(version_split) == len(base_version_split)
+
+    for i in range(len(version_split)):
+        if base_version_split[i] > version_split[i]:
+            return False
+        elif base_version_split[i] < version_split[i]:
+            return True
+
+    # Both versions are equal
+    return True
