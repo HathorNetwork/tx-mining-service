@@ -66,7 +66,15 @@ class App:
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.only_standard_script: bool = only_standard_script
         self.tx_filters = tx_filters or []
-        self.app = web.Application(middlewares=[create_middleware_version_check(min_wallet_desktop_version, min_wallet_mobile_version, min_wallet_headless_version)])
+        self.app = web.Application(
+            middlewares=[
+                create_middleware_version_check(
+                    min_wallet_desktop_version,
+                    min_wallet_mobile_version,
+                    min_wallet_headless_version,
+                )
+            ]
+        )
         self.app.router.add_get("/health-check", self.health_check)
         self.app.router.add_get("/mining-status", self.mining_status)
         self.app.router.add_get("/job-status", self.job_status)
