@@ -414,8 +414,12 @@ def is_version_gte(version: str, base_version: str) -> bool:
     # First we transform the versions from strings in the format X.Y.Z
     # into tuples of integers
 
-    version_int_tuple: Tuple[int] = tuple(map(int, version.split(".")))
-    base_version_int_tuple: Tuple[int] = tuple(map(int, base_version.split(".")))
+    try:
+        version_int_tuple = tuple(map(int, version.split(".")))
+        base_version_int_tuple = tuple(map(int, base_version.split(".")))
+    except ValueError:
+        # version strings are not in the expected format
+        return False
 
     assert len(version_int_tuple) == len(base_version_int_tuple)
 
