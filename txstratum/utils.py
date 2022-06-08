@@ -411,16 +411,12 @@ def is_version_gte(version: str, base_version: str) -> bool:
 
     Validates if version is greater than or equal to base_version
     """
-    version_split = version.split(".")
-    base_version_split = base_version.split(".")
+    # First we transform the versions from strings in the format X.Y.Z
+    # into tuples of integers
 
-    assert len(version_split) == len(base_version_split)
+    version_int_tuple: Tuple[int] = tuple(map(int, version.split(".")))
+    base_version_int_tuple: Tuple[int] = tuple(map(int, base_version.split(".")))
 
-    for i in range(len(version_split)):
-        if base_version_split[i] > version_split[i]:
-            return False
-        elif base_version_split[i] < version_split[i]:
-            return True
+    assert len(version_int_tuple) == len(base_version_int_tuple)
 
-    # Both versions are equal
-    return True
+    return version_int_tuple >= base_version_int_tuple
