@@ -11,7 +11,11 @@ from aiohttp.typedefs import Handler
 
 from txstratum.utils import is_version_gte
 
+# Middleware factory return type
 Middleware = Callable[[web.Request, Handler], Awaitable[web.StreamResponse]]
+
+# Error message
+VERSION_CHECK_ERROR_MESSAGE = "wallet-version-too-old"
 
 
 def create_middleware_version_check(
@@ -43,7 +47,7 @@ def create_middleware_version_check(
                 wallet_desktop_regex, user_agent, min_wallet_desktop_version
             ):
                 return web.json_response(
-                    {"error": "wallet-version-invalid"}, status=400
+                    {"error": VERSION_CHECK_ERROR_MESSAGE}, status=400
                 )
 
         if min_wallet_mobile_version:
@@ -56,7 +60,7 @@ def create_middleware_version_check(
                 wallet_mobile_regex, user_agent, min_wallet_mobile_version
             ):
                 return web.json_response(
-                    {"error": "wallet-version-invalid"}, status=400
+                    {"error": VERSION_CHECK_ERROR_MESSAGE}, status=400
                 )
 
             # Before version 0.18.0 in the wallet mobile, the user agent was receiving a fixed "version"
@@ -68,7 +72,7 @@ def create_middleware_version_check(
                 if search:
                     # If the regex found it, then we should block
                     return web.json_response(
-                        {"error": "wallet-version-invalid"}, status=400
+                        {"error": VERSION_CHECK_ERROR_MESSAGE}, status=400
                     )
 
         if min_wallet_headless_version:
@@ -81,7 +85,7 @@ def create_middleware_version_check(
                 wallet_headless_regex, user_agent, min_wallet_headless_version
             ):
                 return web.json_response(
-                    {"error": "wallet-version-invalid"}, status=400
+                    {"error": VERSION_CHECK_ERROR_MESSAGE}, status=400
                 )
 
         response = await handler(request)

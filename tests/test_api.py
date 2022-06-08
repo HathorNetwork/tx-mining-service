@@ -16,6 +16,7 @@ from txstratum.api import (
     App,
 )
 from txstratum.manager import TxMiningManager
+from txstratum.middleware import VERSION_CHECK_ERROR_MESSAGE
 from txstratum.utils import tx_or_block_from_bytes
 
 from .tx_examples import INVALID_TX_DATA
@@ -529,7 +530,7 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": "wallet-version-invalid"}, data)
+            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
         else:
             self.assertEqual(200, resp.status)
 
@@ -560,7 +561,7 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": "wallet-version-invalid"}, data)
+            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
         else:
             self.assertEqual(200, resp.status)
 
@@ -571,7 +572,7 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": "wallet-version-invalid"}, data)
+            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
         else:
             self.assertEqual(200, resp.status)
 
@@ -610,7 +611,7 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": "wallet-version-invalid"}, data)
+            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
         else:
             self.assertEqual(200, resp.status)
 
