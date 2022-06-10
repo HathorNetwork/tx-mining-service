@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Optional, Pattern
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
@@ -16,6 +16,27 @@ Middleware = Callable[[web.Request, Handler], Awaitable[web.StreamResponse]]
 
 # Error message
 VERSION_CHECK_ERROR_MESSAGE = "wallet-version-too-old"
+
+# Compiled wallet regex
+# We should compile them outside the function to improve
+# the middleware performance
+
+# Example of a wallet desktop user agent
+# Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HathorWallet/0.22.1
+# Chrome/73.0.3683.121 Electron/5.0.13 Safari/537.36 HathorWallet/0.22.1
+WALLET_DESKTOP_COMPILED_REGEX = re.compile(r"HathorWallet/(\d+\.\d+.\d+)")
+
+# Example of a wallet mobile user agent
+# Hathor Wallet Mobile / 0.18.0
+WALLET_MOBILE_COMPILED_REGEX = re.compile(r"Hathor Wallet Mobile / (\d+\.\d+\.\d+)")
+
+# Example of previous versions user agent for mobile
+# HathorMobile/1
+WALLET_MOBILE_CUSTOM_COMPILED_REGEX = re.compile(r"HathorMobile/1")
+
+# Example of a wallet headless user agent
+# Hathor Wallet Headless / 0.14.0
+WALLET_HEADLESS_COMPILED_REGEX = re.compile(r"Hathor Wallet Headless / (\d+\.\d+\.\d+)")
 
 
 def create_middleware_version_check(
@@ -39,11 +60,9 @@ def create_middleware_version_check(
         if min_wallet_desktop_version:
             # Search user agent for wallet desktop string and get version
             # Then check if version is the minimum allowed
-            # Example of a wallet desktop user agent
-            # Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HathorWallet/0.22.1
-            # Chrome/73.0.3683.121 Electron/5.0.13 Safari/537.36 HathorWallet/0.22.1
-            wallet_desktop_regex = r"HathorWallet/(\d+\.\d+.\d+)"
-            version = get_version_from_user_agent(wallet_desktop_regex, user_agent)
+            version = get_version_from_user_agent(
+                WALLET_DESKTOP_COMPILED_REGEX, user_agent
+            )
             if version and not is_version_gte(version, min_wallet_desktop_version):
                 return web.json_response(
                     {
@@ -59,10 +78,9 @@ def create_middleware_version_check(
         if min_wallet_mobile_version:
             # Search user agent for wallet mobile string and get version
             # Then check if version is the minimum allowed
-            # Example of a wallet mobile user agent
-            # Hathor Wallet Mobile / 0.18.0
-            wallet_mobile_regex = r"Hathor Wallet Mobile / (\d+\.\d+\.\d+)"
-            version = get_version_from_user_agent(wallet_mobile_regex, user_agent)
+            version = get_version_from_user_agent(
+                WALLET_MOBILE_COMPILED_REGEX, user_agent
+            )
             if version and not is_version_gte(version, min_wallet_mobile_version):
                 return web.json_response(
                     {
@@ -79,8 +97,7 @@ def create_middleware_version_check(
             # the user agent was "HathorMobile/1", so if the min version is at least 0.18.0, then
             # we must have a custom check here for it
             if is_version_gte(min_wallet_mobile_version, "0.18.0"):
-                custom_regex = "HathorMobile/1"
-                search = re.search(custom_regex, user_agent)
+                search = WALLET_MOBILE_CUSTOM_COMPILED_REGEX.search(user_agent)
                 if search:
                     # If the regex found it, then we should block
                     return web.json_response(
@@ -94,10 +111,9 @@ def create_middleware_version_check(
         if min_wallet_headless_version:
             # Seach user agent for wallet headless string and get version
             # Then check if version is the minimum allowed
-            # Example of a wallet headless user agent
-            # Hathor Wallet Headless / 0.14.0
-            wallet_headless_regex = r"Hathor Wallet Headless / (\d+\.\d+\.\d+)"
-            version = get_version_from_user_agent(wallet_headless_regex, user_agent)
+            version = get_version_from_user_agent(
+                WALLET_HEADLESS_COMPILED_REGEX, user_agent
+            )
             if version and not is_version_gte(version, min_wallet_headless_version):
                 return web.json_response(
                     {
@@ -116,9 +132,11 @@ def create_middleware_version_check(
     return version_check
 
 
-def get_version_from_user_agent(regex: str, user_agent: str) -> Optional[str]:
+def get_version_from_user_agent(
+    compiled_regex: Pattern[str], user_agent: str
+) -> Optional[str]:
     """Parse user agent using regex to search for a wallet version on it."""
-    search = re.search(regex, user_agent)
+    search = compiled_regex.search(user_agent)
     if search and search.groups():
         return search.groups()[0]
 
