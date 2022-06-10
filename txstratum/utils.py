@@ -25,6 +25,7 @@ from typing import (
 from structlog import get_logger
 
 from txstratum.constants import DEFAULT_EXPECTED_MINING_TIME
+from txstratum.exceptions import InvalidVersionFormat
 
 if TYPE_CHECKING:
     from asyncio.events import AbstractEventLoop
@@ -421,6 +422,7 @@ def is_version_gte(version: str, base_version: str) -> bool:
         # version strings are not in the expected format
         return False
 
-    assert len(version_int_tuple) == len(base_version_int_tuple)
+    if len(version_int_tuple) != len(base_version_int_tuple):
+        raise InvalidVersionFormat(f"Expected version format is X.Y.Z, and received version {version} and base version {base_version}")
 
     return version_int_tuple >= base_version_int_tuple
