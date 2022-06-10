@@ -615,6 +615,22 @@ class BaseAppTestCase(AioHTTPTestCase):
         else:
             self.assertEqual(200, resp.status)
 
+        header_headless_wrong1 = {"User-Agent": "Hathor Wallet Headless / 0.xx.88"}
+        header_headless_wrong2 = {"User-Agent": "Hathor Wallet Headless / 0.14.88beta"}
+
+        # Success in both cases because the regex shouldn't identify this as headless versions
+        resp = await self.client.request(
+            "POST", "/submit-job", json={"tx": tx_hex}, headers=header_headless_wrong1
+        )
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
+        resp = await self.client.request(
+            "POST", "/submit-job", json={"tx": tx_hex}, headers=header_headless_wrong2
+        )
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
 
 class AppTestCase(BaseAppTestCase):
     __test__ = True
