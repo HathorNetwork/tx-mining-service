@@ -423,6 +423,8 @@ def is_version_gte(version: str, base_version: str) -> bool:
         return False
 
     if len(version_int_tuple) != len(base_version_int_tuple):
-        raise InvalidVersionFormat(f"Expected version format is X.Y.Z, and received version {version} and base version {base_version}")
+        raise InvalidVersionFormat(
+            f"Expected version format is X.Y.Z, and received version {version} and base version {base_version}"
+        )
 
     return version_int_tuple >= base_version_int_tuple
