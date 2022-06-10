@@ -530,7 +530,13 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
+            self.assertEqual(
+                {
+                    "error": VERSION_CHECK_ERROR_MESSAGE,
+                    "data": {"min_version": "0.23.0", "version": "0.22.1"},
+                },
+                data,
+            )
         else:
             self.assertEqual(200, resp.status)
 
@@ -561,7 +567,13 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
+            self.assertEqual(
+                {
+                    "error": VERSION_CHECK_ERROR_MESSAGE,
+                    "data": {"min_version": "1.18.3", "version": "0.18.0"},
+                },
+                data,
+            )
         else:
             self.assertEqual(200, resp.status)
 
@@ -572,7 +584,13 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
+            self.assertEqual(
+                {
+                    "error": VERSION_CHECK_ERROR_MESSAGE,
+                    "data": {"min_version": "1.18.3"},
+                },
+                data,
+            )
         else:
             self.assertEqual(200, resp.status)
 
@@ -611,7 +629,13 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         if self.version_check:
             self.assertEqual(400, resp.status)
-            self.assertEqual({"error": VERSION_CHECK_ERROR_MESSAGE}, data)
+            self.assertEqual(
+                {
+                    "error": VERSION_CHECK_ERROR_MESSAGE,
+                    "data": {"min_version": "0.14.88", "version": "0.14.87"},
+                },
+                data,
+            )
         else:
             self.assertEqual(200, resp.status)
 
