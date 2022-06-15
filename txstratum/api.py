@@ -14,6 +14,7 @@ from structlog import get_logger
 import txstratum.time
 from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 from txstratum.jobs import JobStatus, TxJob
+from txstratum.middleware import create_middleware_version_check
 from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
@@ -50,7 +51,10 @@ class App:
         fix_invalid_timestamp: bool = False,
         max_output_script_size: Optional[int] = None,
         only_standard_script: bool = True,
-        tx_filters: Optional[List["TXFilter"]] = None
+        tx_filters: Optional[List["TXFilter"]] = None,
+        min_wallet_desktop_version: Optional[str] = None,
+        min_wallet_mobile_version: Optional[str] = None,
+        min_wallet_headless_version: Optional[str] = None,
     ):
         """Init App."""
         super().__init__()
@@ -62,7 +66,15 @@ class App:
         self.tx_timeout: float = tx_timeout or TX_TIMEOUT
         self.only_standard_script: bool = only_standard_script
         self.tx_filters = tx_filters or []
-        self.app = web.Application()
+        self.app = web.Application(
+            middlewares=[
+                create_middleware_version_check(
+                    min_wallet_desktop_version,
+                    min_wallet_mobile_version,
+                    min_wallet_headless_version,
+                )
+            ]
+        )
         self.app.router.add_get("/health-check", self.health_check)
         self.app.router.add_get("/mining-status", self.mining_status)
         self.app.router.add_get("/job-status", self.job_status)
