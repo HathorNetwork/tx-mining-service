@@ -109,6 +109,27 @@ def create_parser() -> ArgumentParser:
         "backend", help="Endpoint of the Hathor API (without version)", type=str
     )
 
+    parser.add_argument(
+        "--min-wallet-desktop-version",
+        help="Minimum version for the wallet desktop to use this tx mining",
+        type=str,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--min-wallet-mobile-version",
+        help="Minimum version for the wallet mobile to use this tx mining",
+        type=str,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--min-wallet-headless-version",
+        help="Minimum version for the wallet headless to use this tx mining",
+        type=str,
+        default=None,
+    )
+
     logs = parser.add_mutually_exclusive_group()
     logs.add_argument(
         "--log-config",
@@ -238,6 +259,9 @@ class RunService:
             fix_invalid_timestamp=self.args.fix_invalid_timestamp,
             only_standard_script=not self.args.allow_non_standard_script,
             tx_filters=self.tx_filters,
+            min_wallet_desktop_version=self.args.min_wallet_desktop_version,
+            min_wallet_mobile_version=self.args.min_wallet_mobile_version,
+            min_wallet_headless_version=self.args.min_wallet_headless_version,
         )
 
         logger.info(
@@ -248,6 +272,9 @@ class RunService:
             fix_invalid_timestamp=api_app.fix_invalid_timestamp,
             only_standard_script=api_app.only_standard_script,
             tx_filters=self.tx_filters,
+            min_wallet_desktop_version=self.args.min_wallet_desktop_version,
+            min_wallet_mobile_version=self.args.min_wallet_mobile_version,
+            min_wallet_headless_version=self.args.min_wallet_headless_version,
         )
 
         web_runner = web.AppRunner(api_app.app, logger=logger)
