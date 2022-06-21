@@ -1,4 +1,4 @@
-FROM python:3.9-alpine3.15 as build
+FROM python:3.9-alpine as build
 
 WORKDIR /code
 
@@ -11,7 +11,7 @@ RUN pip --no-input --no-cache-dir install 'poetry==1.2.0b2'
 COPY poetry.lock pyproject.toml /code/
 
 RUN poetry config virtualenvs.create false \
-  && poetry install --no-dev --no-interaction --no-ansi
+  && poetry install --only main --no-interaction --no-ansi
 
 FROM python:3.9-alpine
 
