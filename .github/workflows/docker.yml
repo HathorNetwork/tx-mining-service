@@ -5,7 +5,6 @@ on:
     - v*
     branches:
     - master
-    - fix/rust-build
 
 jobs:
   # Builds and pushes the Docker image to Docker Hub and ECR
@@ -57,7 +56,7 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@a66e35b9cbcf4ad0ea91ffcaf7bbad63ad9e0229
       with:
-        push: false
+        push: true
         tags: ${{ steps.tags.outputs.tags }}
         platforms: linux/amd64,linux/arm64
         cache-from: type=gha

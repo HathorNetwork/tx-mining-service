@@ -6,7 +6,7 @@ WORKDIR /code
 RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev rust cargo
 
 RUN pip --no-input --no-cache-dir install --upgrade pip wheel
-RUN pip --no-input --no-cache-dir install 'poetry==1.2.0b2'
+RUN pip --no-input --no-cache-dir install 'poetry>=1.2.0b2'
 
 COPY poetry.lock pyproject.toml /code/
 
