@@ -6,12 +6,12 @@ WORKDIR /code
 RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev rust cargo
 
 RUN pip --no-input --no-cache-dir install --upgrade pip wheel
-RUN pip --no-input --no-cache-dir install 'poetry==1.1.6'
+RUN pip --no-input --no-cache-dir install 'poetry>=1.2.0b2'
 
 COPY poetry.lock pyproject.toml /code/
 
 RUN poetry config virtualenvs.create false \
-  && poetry install --no-dev --no-interaction --no-ansi
+  && poetry install --only main --no-interaction --no-ansi
 
 FROM python:3.9-alpine
 
