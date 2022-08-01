@@ -43,7 +43,9 @@ WALLET_HEADLESS_COMPILED_REGEX = re.compile(r"Hathor Wallet Headless / (\d+\.\d+
 HEADER_SKIP_VERSION_CHECK_KEY = "X-UNSAFE-IGNORE-WALLET-VERSION-CHECK"
 
 # The header value that is used to ignore the wallet version check
-HEADER_SKIP_VERSION_CHECK_VALUE = "I know what I am doing and I want to skip wallet version check"
+HEADER_SKIP_VERSION_CHECK_VALUE = (
+    "I know what I am doing and I want to skip wallet version check"
+)
 
 
 def create_middleware_version_check(
