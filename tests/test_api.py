@@ -16,7 +16,11 @@ from txstratum.api import (
     App,
 )
 from txstratum.manager import TxMiningManager
-from txstratum.middleware import VERSION_CHECK_ERROR_MESSAGE
+from txstratum.middleware import (
+    HEADER_SKIP_VERSION_CHECK_KEY,
+    HEADER_SKIP_VERSION_CHECK_VALUE,
+    VERSION_CHECK_ERROR_MESSAGE,
+)
 from txstratum.utils import tx_or_block_from_bytes
 
 from .tx_examples import INVALID_TX_DATA
@@ -488,6 +492,10 @@ class BaseAppTestCase(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_check_wallet_version(self):
+        header_skip_version_check = {
+            HEADER_SKIP_VERSION_CHECK_KEY: HEADER_SKIP_VERSION_CHECK_VALUE
+        }
+
         tx_hex = update_timestamp(TX_SCRIPT_DATA25).hex()
 
         header_desktop_lower = {
@@ -540,6 +548,16 @@ class BaseAppTestCase(AioHTTPTestCase):
         else:
             self.assertEqual(200, resp.status)
 
+        # Success always with skip version check header
+        resp = await self.client.request(
+            "POST",
+            "/submit-job",
+            json={"tx": tx_hex},
+            headers={**header_desktop_lower, **header_skip_version_check},
+        )
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
         header_mobile_lower = {"User-Agent": "Hathor Wallet Mobile / 0.18.0"}
         header_mobile_equal = {"User-Agent": "Hathor Wallet Mobile / 1.18.3"}
         header_mobile_higher = {"User-Agent": "Hathor Wallet Mobile / 20.1.0"}
@@ -577,6 +595,16 @@ class BaseAppTestCase(AioHTTPTestCase):
         else:
             self.assertEqual(200, resp.status)
 
+        # Success always with skip version check header
+        resp = await self.client.request(
+            "POST",
+            "/submit-job",
+            json={"tx": tx_hex},
+            headers={**header_mobile_lower, **header_skip_version_check},
+        )
+        await resp.json()
+        self.assertEqual(200, resp.status)
+
         # Error with mobile version before v0.18.0, if the app is validating mobile version
         resp = await self.client.request(
             "POST", "/submit-job", json={"tx": tx_hex}, headers=header_mobile_custom
@@ -593,6 +621,16 @@ class BaseAppTestCase(AioHTTPTestCase):
             )
         else:
             self.assertEqual(200, resp.status)
+
+        # Success always with skip version check header
+        resp = await self.client.request(
+            "POST",
+            "/submit-job",
+            json={"tx": tx_hex},
+            headers={**header_mobile_custom, **header_skip_version_check},
+        )
+        await resp.json()
+        self.assertEqual(200, resp.status)
 
         # Success if the custom is different than expected
         resp = await self.client.request(
@@ -638,6 +676,16 @@ class BaseAppTestCase(AioHTTPTestCase):
             )
         else:
             self.assertEqual(200, resp.status)
+
+        # Success always with skip version check header
+        resp = await self.client.request(
+            "POST",
+            "/submit-job",
+            json={"tx": tx_hex},
+            headers={**header_headless_lower, **header_skip_version_check},
+        )
+        await resp.json()
+        self.assertEqual(200, resp.status)
 
         header_headless_wrong1 = {"User-Agent": "Hathor Wallet Headless / 0.xx.88"}
         header_headless_wrong2 = {"User-Agent": "Hathor Wallet Headless / 0.14.88beta"}

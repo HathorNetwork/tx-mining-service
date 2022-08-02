@@ -38,6 +38,15 @@ WALLET_MOBILE_CUSTOM_COMPILED_REGEX = re.compile(r"HathorMobile/1")
 # Hathor Wallet Headless / 0.14.0
 WALLET_HEADLESS_COMPILED_REGEX = re.compile(r"Hathor Wallet Headless / (\d+\.\d+\.\d+)")
 
+# The header key that is used to ignore the wallet version check
+# Issue: https://github.com/HathorNetwork/internal-issues/issues/118
+HEADER_SKIP_VERSION_CHECK_KEY = "X-UNSAFE-IGNORE-WALLET-VERSION-CHECK"
+
+# The header value that is used to ignore the wallet version check
+HEADER_SKIP_VERSION_CHECK_VALUE = (
+    "I know what I am doing and I want to skip wallet version check"
+)
+
 
 def create_middleware_version_check(
     min_wallet_desktop_version: Optional[str],
@@ -51,6 +60,11 @@ def create_middleware_version_check(
         request: web.Request, handler: Handler
     ) -> web.StreamResponse:
         """Check wallet versions from user agent."""
+        skip_version_check_header = request.headers.get(HEADER_SKIP_VERSION_CHECK_KEY)
+        if skip_version_check_header == HEADER_SKIP_VERSION_CHECK_VALUE:
+            response = await handler(request)
+            return response
+
         user_agent = request.headers.get("User-Agent")
 
         if not user_agent:
