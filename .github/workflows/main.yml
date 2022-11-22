@@ -19,8 +19,8 @@ jobs:
       matrix:
         python:
         - 3.9
-        - 3.10
-        - 3.11
+        - '3.10'
+        - '3.11'
         os:
         - ubuntu-latest
     steps:
