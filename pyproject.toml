@@ -14,7 +14,7 @@ homepage = "https://hathor.network/"
 repository = "https://github.com/HathorNetwork/tx-mining-service/"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<4.0"
+python = ">=3.9,<4.0"
 ConfigArgParse = "^1.2.3"
 colorama = "^0.4.4"
 aiohttp = "^3.7.3"
