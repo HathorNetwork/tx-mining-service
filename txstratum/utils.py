@@ -312,7 +312,7 @@ class MaxSizeOrderedDict(OrderedDict, Generic[KT, VT]):  # type: ignore
 
     def __setitem__(self, key: KT, value: VT) -> None:
         """Add a new element to the dict."""
-        OrderedDict.__setitem__(self, key, value)
+        OrderedDict.__setitem__(self, key, value)  # type: ignore[assignment]
         if self._max > 0:
             if len(self) > self._max:
                 self.popitem(False)
