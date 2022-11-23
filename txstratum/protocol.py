@@ -148,7 +148,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         assert type(msgid) is int
 
-        message = self.messages_in_transit.pop(cast(int, msgid))
+        message = self.messages_in_transit.pop(msgid)
 
         if message.method == "client.get_version":
             self.log.info("Miner version: {}".format(result), miner_id=self.miner_id)
