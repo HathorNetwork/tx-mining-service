@@ -18,9 +18,8 @@ jobs:
     strategy:
       matrix:
         python:
-        - 3.6
-        - 3.7
-        - 3.8
+        - 3.9
+        - '3.10'
         os:
         - ubuntu-latest
     steps:
@@ -40,4 +39,4 @@ jobs:
       run: poetry run make tests
     - name: Upload coverage
       uses: codecov/codecov-action@v1
-      if: matrix.python == 3.6 && matrix.os == 'ubuntu-latest'
+      if: matrix.python == 3.9 && matrix.os == 'ubuntu-latest'

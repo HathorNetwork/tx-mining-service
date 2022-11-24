@@ -5,7 +5,7 @@
 
 [tool.poetry]
 name = "tx-mining-service"
-version = "0.9.0"
+version = "0.9.1"
 description = "Service to mine transactions"
 authors = ["Hathor Team <contact@hathor.network>"]
 license = "MIT"
@@ -14,7 +14,7 @@ homepage = "https://hathor.network/"
 repository = "https://github.com/HathorNetwork/tx-mining-service/"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<4.0"
+python = ">=3.9,<4.0"
 ConfigArgParse = "^1.2.3"
 colorama = "^0.4.4"
 aiohttp = "^3.7.3"
@@ -23,14 +23,14 @@ structlog = "^20.2.0"
 prometheus-client = "^0.9.0"
 idna_ssl = "^1.1.0"
 asynctest = "^0.13.0"
-hathorlib = {version = "^0.2.0", extras = ["client"]}
+hathorlib = {version = "^0.3.0", extras = ["client"]}
 dataclasses = {version = "^0.8", python = ">=3.6,<3.7"}
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.8.4"
 flake8-docstrings = "^1.5.0"
 isort = "^5.7.0"
-mypy = "^0.790"
+mypy = "^0.981"
 numpy = "^1.19.4"
 pytest = "^6.2.1"
 pytest-aiohttp = "^0.3.0"
