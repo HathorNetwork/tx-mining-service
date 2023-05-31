@@ -17,24 +17,24 @@ repository = "https://github.com/HathorNetwork/tx-mining-service/"
 python = ">=3.9,<4.0"
 ConfigArgParse = "^1.2.3"
 colorama = "^0.4.4"
-aiohttp = "^3.7.3"
-base58 = "^2.1.0"
-structlog = "^20.2.0"
+aiohttp = "~3.8.3"
+base58 = "~2.1.1"
+structlog = "~22.3.0"
 prometheus-client = "^0.9.0"
 idna_ssl = "^1.1.0"
 asynctest = "^0.13.0"
-hathorlib = {version = "^0.3.0", extras = ["client"]}
+hathorlib = {version = "^0.4.0", extras = ["client"]}
 dataclasses = {version = "^0.8", python = ">=3.6,<3.7"}
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.8.4"
 flake8-docstrings = "^1.5.0"
-isort = "^5.7.0"
-mypy = "^0.981"
+isort = "~5.10.1"
+mypy = "^1.0.0"
 numpy = "^1.19.4"
-pytest = "^6.2.1"
+pytest = "~7.2.0"
 pytest-aiohttp = "^0.3.0"
-pytest-cov = "^2.11.0"
+pytest-cov = "~4.0.0"
 black = "^22.1.0"
 
 [build-system]
