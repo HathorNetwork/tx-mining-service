@@ -8,7 +8,7 @@ LICENSE file in the root directory of this source tree.
 import asyncio
 import unittest
 from collections import deque
-from typing import List, Optional
+from typing import Optional
 from unittest.mock import ANY, MagicMock, Mock
 
 import asynctest  # type: ignore
@@ -97,7 +97,7 @@ class HathorClientTest(HathorClient):
     async def get_block_template(self, address: Optional[str] = None) -> BlockTemplate:
         return self._block_templates[self._current_index]
 
-    async def get_tx_parents(self) -> List[bytes]:
+    async def get_tx_parents(self):
         pass
 
     async def push_tx_or_block(self, raw: bytes) -> bool:
