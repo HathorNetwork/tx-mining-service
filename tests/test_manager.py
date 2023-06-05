@@ -98,7 +98,7 @@ class HathorClientTest(HathorClient):
         return self._block_templates[self._current_index]
 
     async def get_tx_parents(self) -> List[bytes]:
-        pass
+        raise NotImplementedError
 
     async def push_tx_or_block(self, raw: bytes) -> bool:
         self.next_block_template()
