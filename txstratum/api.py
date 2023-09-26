@@ -4,10 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
+from struct import error as StructError
 from typing import TYPE_CHECKING, List, Optional
 
 from aiohttp import web
 from hathorlib import TokenCreationTransaction, Transaction
+from hathorlib.base_transaction import tx_or_block_from_bytes
 from hathorlib.exceptions import TxValidationError
 from structlog import get_logger
 
@@ -15,7 +17,6 @@ import txstratum.time
 from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.middleware import create_middleware_version_check
-from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
     from txstratum.filters import TXFilter
@@ -116,7 +117,7 @@ class App:
         try:
             tx_bytes = bytes.fromhex(tx_hex)
             tx = tx_or_block_from_bytes(tx_bytes)
-        except (ValueError, TxValidationError):
+        except (ValueError, TxValidationError, StructError):
             self.log.debug("invalid-tx(1)", data=data)
             return web.json_response({"error": "invalid-tx"}, status=400)
 
