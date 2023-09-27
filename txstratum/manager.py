@@ -118,6 +118,10 @@ class TxMiningManager:
         self.connections.pop(protocol.miner_id)
         self.miners.pop(protocol.miner_id, None)
 
+    def has_any_miner(self) -> bool:
+        """Return True if there is at least one miner connected."""
+        return len(self.miners) > 0
+
     def shutdown(self) -> None:
         """Tasks to be executed before the service is shut down."""
         self.refuse_new_jobs = True

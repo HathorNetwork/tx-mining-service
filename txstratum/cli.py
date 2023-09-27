@@ -17,6 +17,7 @@ from structlog import get_logger
 
 from txstratum.api import App
 from txstratum.filters import FileFilter, TOIFilter, TXFilter
+from txstratum.healthcheck import HealthCheck
 from txstratum.manager import TxMiningManager
 from txstratum.pubsub import PubSubManager
 from txstratum.toi_client import TOIAsyncClient
@@ -151,6 +152,7 @@ class RunService:
     manager: TxMiningManager
     loop: AbstractEventLoop
     tx_filters: List[TXFilter]
+    health_check: HealthCheck
 
     def __init__(self, args: Namespace) -> None:
         """Initialize the service."""
@@ -167,6 +169,7 @@ class RunService:
             pubsub=self.pubsub,
             address=args.address,
         )
+        self.health_check = HealthCheck(self.manager)
 
     def configure_logging(self, args: Namespace) -> None:
         """Configure logging."""
@@ -253,6 +256,7 @@ class RunService:
 
         api_app = App(
             self.manager,
+            self.health_check,
             max_tx_weight=self.args.max_tx_weight,
             max_timestamp_delta=self.args.max_timestamp_delta,
             tx_timeout=self.args.tx_timeout,
