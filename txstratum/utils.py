@@ -30,8 +30,6 @@ from txstratum.exceptions import InvalidVersionFormat
 if TYPE_CHECKING:
     from asyncio.events import AbstractEventLoop
 
-    from hathorlib import BaseTransaction
-
 logger = get_logger()
 
 
@@ -354,18 +352,6 @@ def calculate_expected_mining_time(
         # docstring of the constant.
         return DEFAULT_EXPECTED_MINING_TIME
     return 3 * (2 ** (job_weight - 30)) / miners_hashrate_ghs
-
-
-def tx_or_block_from_bytes(data: bytes) -> "BaseTransaction":
-    """Create the correct tx subclass from a sequence of bytes."""
-    from hathorlib import TxVersion
-
-    # version field takes up the first 2 bytes
-    version = int.from_bytes(data[0:2], "big")
-
-    tx_version = TxVersion(version)
-    cls = tx_version.get_cls()
-    return cls.create_from_struct(data)
 
 
 def start_logging(loop: Optional["AbstractEventLoop"] = None) -> None:

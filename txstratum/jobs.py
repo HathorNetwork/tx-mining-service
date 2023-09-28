@@ -9,10 +9,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from hathorlib import BaseTransaction, Block
+from hathorlib.base_transaction import tx_or_block_from_bytes
 from hathorlib.scripts import create_output_script
 
 import txstratum.time
-from txstratum.utils import tx_or_block_from_bytes
 
 if TYPE_CHECKING:
     from asyncio import TimerHandle

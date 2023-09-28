@@ -7,6 +7,7 @@ LICENSE file in the root directory of this source tree.
 from unittest.mock import MagicMock
 
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
+from hathorlib.base_transaction import tx_or_block_from_bytes
 
 import txstratum.time
 from txstratum.api import (
@@ -21,7 +22,6 @@ from txstratum.middleware import (
     HEADER_SKIP_VERSION_CHECK_VALUE,
     VERSION_CHECK_ERROR_MESSAGE,
 )
-from txstratum.utils import tx_or_block_from_bytes
 
 from .tx_examples import INVALID_TX_DATA
 
