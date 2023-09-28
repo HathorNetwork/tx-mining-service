@@ -88,7 +88,7 @@ class App:
 
     async def health(self, request: web.Request) -> web.Response:
         """Return that the service is running."""
-        health_check_result = self.health_check.get_health_check()
+        health_check_result = await self.health_check.get_health_check()
         http_status = health_check_result.get_http_status_code()
 
         return web.json_response(health_check_result.to_json(), status=http_status)

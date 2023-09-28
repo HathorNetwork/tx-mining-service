@@ -169,7 +169,7 @@ class RunService:
             pubsub=self.pubsub,
             address=args.address,
         )
-        self.health_check = HealthCheck(self.manager)
+        self.health_check = HealthCheck(self.manager, self.backend)
 
     def configure_logging(self, args: Namespace) -> None:
         """Configure logging."""
