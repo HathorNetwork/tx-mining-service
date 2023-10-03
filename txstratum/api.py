@@ -62,7 +62,7 @@ class App:
         super().__init__()
         self.log = logger.new()
         self.manager = manager
-        self.health_check = health_check
+        self.health_check_manager = health_check
         self.max_tx_weight: float = max_tx_weight or MAX_TX_WEIGHT
         self.max_output_script_size = max_output_script_size or MAX_OUTPUT_SCRIPT_SIZE
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
@@ -78,6 +78,7 @@ class App:
                 )
             ]
         )
+        self.app.router.add_get("/health-check", self.health_check)
         self.app.router.add_get("/health", self.health)
         self.app.router.add_get("/mining-status", self.mining_status)
         self.app.router.add_get("/job-status", self.job_status)
@@ -87,11 +88,16 @@ class App:
         self.fix_invalid_timestamp: bool = fix_invalid_timestamp
 
     async def health(self, request: web.Request) -> web.Response:
-        """Return that the service is running."""
-        health_check_result = await self.health_check.get_health_check()
+        """Return the health check status for the tx-mining-service."""
+        health_check_result = await self.health_check_manager.get_health_check()
         http_status = health_check_result.get_http_status_code()
 
         return web.json_response(health_check_result.to_json(), status=http_status)
+
+    # XXX: DEPRECATED, Use /health instead
+    async def health_check(self, request: web.Request) -> web.Response:
+        """Return that the service is running."""
+        return web.json_response({"success": True})
 
     async def mining_status(self, request: web.Request) -> web.Response:
         """Return status of miners."""
