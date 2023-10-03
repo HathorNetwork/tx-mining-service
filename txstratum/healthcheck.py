@@ -140,7 +140,7 @@ class HealthCheck(HealthCheckInterface):
 
         return HealthCheckResult(
             status=overall_status,
-            description='health of txstratum service',
+            description='health of tx-mining-service',
             checks={c.component_name: [c] for c in components_health_checks}
         )
 
@@ -159,7 +159,8 @@ class FullnodeHealthCheck(HealthCheckInterface):
         health_check = ComponentHealthCheck(
             component_name='fullnode',
             component_type=ComponentType.FULLNODE,
-            component_id=self.backend._base_url,  # TODO: Ideally we should not use private fields
+            # TODO: Ideally we should not use private fields. We'll fix this when fixing line 170
+            component_id=self.backend._base_url,
             status=HealthCheckStatus.PASS,
             time=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
             output='fullnode is responding correctly'

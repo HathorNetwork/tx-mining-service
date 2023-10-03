@@ -7,6 +7,7 @@ LICENSE file in the root directory of this source tree.
 from unittest.mock import MagicMock
 
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
+from txstratum.healthcheck import HealthCheck
 
 import txstratum.time
 from txstratum.api import (
@@ -134,10 +135,17 @@ class BaseAppTestCase(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_health_check(self):
-        resp = await self.client.request("GET", "/health-check")
+        health_check_result = MagicMock()
+        health_check_result.get_http_status_code.return_value = 200
+        health_check_result.to_json.return_value = {"status": "pass"}
+        async def side_effect():
+            return health_check_result
+        self.healthcheck.get_health_check.side_effect = side_effect
+
+        resp = await self.client.request("GET", "/health")
         assert resp.status == 200
         data = await resp.json()
-        self.assertTrue(data["success"])
+        self.assertEqual(data, {"status": "pass"})
 
     @unittest_run_loop
     async def test_mining_status(self):
@@ -709,7 +717,8 @@ class AppTestCase(BaseAppTestCase):
 
     async def get_application(self):
         self.manager = TxMiningManager(backend=None, pubsub=MagicMock(), address=None)
-        self.myapp = App(self.manager)
+        self.healthcheck = MagicMock()
+        self.myapp = App(self.manager, self.healthcheck)
         self.version_check = False
         return self.myapp.app
 
@@ -719,8 +728,10 @@ class AppVersionCheckTestCase(BaseAppTestCase):
 
     async def get_application(self):
         self.manager = TxMiningManager(backend=None, pubsub=MagicMock(), address=None)
+        self.healthcheck = MagicMock()
         self.myapp = App(
             self.manager,
+            self.healthcheck,
             min_wallet_desktop_version="0.23.0",
             min_wallet_mobile_version="1.18.3",
             min_wallet_headless_version="0.14.88",
