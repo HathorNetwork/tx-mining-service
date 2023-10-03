@@ -122,7 +122,7 @@ class TxMiningManager:
         """Return True if there is at least one miner connected."""
         return len(self.miners) > 0
 
-    def has_any_submitted_job_in_period(self, period: int ) -> bool:
+    def has_any_submitted_job_in_period(self, period: int) -> bool:
         """Return True if there is at least one miner that submitted a job in the last `period` seconds."""
         now = txstratum.time.time()
 
