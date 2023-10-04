@@ -83,16 +83,24 @@ class HealthCheckResult:
     description: str
     checks: Dict[str, List[ComponentHealthCheck]]
 
+    def __post_init__(self) -> None:
+        """Perform some validations after the object is initialized."""
+        # Make sure the checks dict is not empty
+        if not self.checks:
+            raise ValueError("checks dict cannot be empty")
+
+        # Make sure the status is valid
+        if self.status not in HealthCheckStatus:
+            raise ValueError("Invalid status")
+
     def get_http_status_code(self) -> int:
         """Return the HTTP status code for the status."""
-        if self.status == HealthCheckStatus.PASS:
+        if self.status in [HealthCheckStatus.PASS]:
             return 200
-        elif self.status == HealthCheckStatus.WARN:
-            return 503
-        elif self.status == HealthCheckStatus.FAIL:
+        elif self.status in [HealthCheckStatus.WARN, HealthCheckStatus.FAIL]:
             return 503
         else:
-            raise ValueError("Invalid status")
+            raise ValueError(f"Missing treatment for status {self.status}")
 
     def to_json(self) -> Dict[str, Any]:
         """Return a dict representation of the object. All field names are converted to camel case."""
