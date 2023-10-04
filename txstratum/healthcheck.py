@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -135,9 +136,7 @@ class HealthCheck:
 
     async def get_health_check(self) -> HealthCheckResult:
         """Return the health check status for the tx-mining-service."""
-        components_health_checks = [
-            await c.get_health_check() for c in self.health_check_components
-        ]
+        components_health_checks = await asyncio.gather(*[c.get_health_check() for c in self.health_check_components])
         components_status = {c.status for c in components_health_checks}
 
         overall_status = HealthCheckStatus.PASS
