@@ -57,7 +57,7 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
             component_id=self.backend._base_url,
             status=HealthCheckStatus.PASS,
             time=datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            output="fullnode is responding correctly",
+            output="Fullnode is responding correctly",
         )
 
         try:
@@ -67,7 +67,7 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
             return health_check
         except Exception as e:
             health_check.status = HealthCheckStatus.FAIL
-            health_check.output = f"couldn't connect to fullnode: {str(e)}"
+            health_check.output = f"Couldn't connect to fullnode: {str(e)}"
 
             return health_check
 
@@ -117,7 +117,7 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
                 component_name=self.COMPONENT_NAME,
                 component_type=ComponentType.INTERNAL,
                 status=HealthCheckStatus.FAIL,
-                output="no miners connected",
+                output="No miners connected",
             )
 
         # Check that all the miners submitted in the last 1 hour. If not, return failed.
@@ -126,12 +126,16 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
                 component_name=self.COMPONENT_NAME,
                 component_type=ComponentType.INTERNAL,
                 status=HealthCheckStatus.FAIL,
-                output="no miners submitted a job in the last 1 hour",
+                output="No miners submitted a job in the last 1 hour",
             )
 
         if not self.manager.tx_jobs:
-            # We just return the last saved status in case there are no jobs in the last 5 minutes
-            return self.last_manager_status
+            return ComponentHealthCheck(
+                component_name=self.COMPONENT_NAME,
+                component_type=ComponentType.INTERNAL,
+                status=self.last_manager_status.status,
+                output=f"We had no tx_jobs in the last 5 minutes, so we are just returning the last observed status from {self.last_manager_status.time}. The output was: {self.last_manager_status.output}"
+            )
 
         failed_jobs = []
         long_running_jobs = []
@@ -152,13 +156,13 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
                 status=HealthCheckStatus.FAIL
                 if failed_jobs
                 else HealthCheckStatus.WARN,
-                output=f"we had {len(failed_jobs)} failed jobs and {len(long_running_jobs)} long running jobs in the last 5 minutes",
+                output=f"We had {len(failed_jobs)} failed jobs and {len(long_running_jobs)} long running jobs in the last 5 minutes",
             )
 
             return self.last_manager_status
 
         self.last_manager_status.update(
-            status=HealthCheckStatus.PASS, output="everything is ok"
+            status=HealthCheckStatus.PASS, output="Everything is ok"
         )
 
         return self.last_manager_status

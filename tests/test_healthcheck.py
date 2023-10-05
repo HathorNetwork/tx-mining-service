@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import asynctest  # type: ignore[import]
 
@@ -31,7 +32,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.component_name, "fullnode")
         self.assertEqual(result.component_type, ComponentType.FULLNODE)
         self.assertEqual(result.status, HealthCheckStatus.PASS)
-        self.assertEqual(result.output, "fullnode is responding correctly")
+        self.assertEqual(result.output, "Fullnode is responding correctly")
         self.assertEqual(result.component_id, "http://localhost:8080")
 
     async def test_get_health_check_with_an_unhealthy_fullnode(self):
@@ -43,7 +44,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.component_name, "fullnode")
         self.assertEqual(result.component_type, ComponentType.FULLNODE)
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
-        self.assertEqual(result.output, "couldn't connect to fullnode: error")
+        self.assertEqual(result.output, "Couldn't connect to fullnode: error")
         self.assertEqual(result.component_id, "http://localhost:8080")
 
 
@@ -53,64 +54,109 @@ class TestMiningHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.mining_health_check = MiningHealthCheck(manager=self.manager)
 
     async def test_get_health_check_no_miners(self):
+        # Preparation
         self.manager.has_any_miner.return_value = False
+        # Execution
         result = await self.mining_health_check.get_health_check()
+        # Assertion
         self.assertEqual(result.component_name, "manager")
         self.assertEqual(result.component_type, ComponentType.INTERNAL)
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
-        self.assertEqual(result.output, "no miners connected")
+        self.assertEqual(result.output, "No miners connected")
 
     async def test_get_health_check_no_submitted_job_in_period(self):
+        # Preparation
         self.manager.has_any_miner.return_value = True
         self.manager.has_any_submitted_job_in_period.return_value = False
+        # Execution
         result = await self.mining_health_check.get_health_check()
+        # Assertion
         self.assertEqual(result.component_name, "manager")
         self.assertEqual(result.component_type, ComponentType.INTERNAL)
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
-        self.assertEqual(result.output, "no miners submitted a job in the last 1 hour")
+        self.assertEqual(result.output, "No miners submitted a job in the last 1 hour")
 
     async def test_get_health_check_failed_job(self):
+        # Preparation
         self.manager.has_any_miner.return_value = True
         self.manager.has_any_submitted_job_in_period.return_value = True
         job = MagicMock()
         job.is_failed.return_value = True
+        job.total_time = 9
         self.manager.tx_jobs = {"job_id": job}
+        # Execution
         result = await self.mining_health_check.get_health_check()
+        # Assertion
         self.assertEqual(result.component_name, "manager")
         self.assertEqual(result.component_type, ComponentType.INTERNAL)
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
         self.assertEqual(
-            result.output, "some tx_jobs in the last 5 minutes have failed"
+            result.output, "We had 1 failed jobs and 0 long running jobs in the last 5 minutes"
         )
 
     async def test_get_health_check_slow_job(self):
+        # Preparation
         self.manager.has_any_miner.return_value = True
         self.manager.has_any_submitted_job_in_period.return_value = True
         job = MagicMock()
         job.is_failed.return_value = False
         job.total_time = 11
         self.manager.tx_jobs = {"job_id": job}
+        # Execution
         result = await self.mining_health_check.get_health_check()
+        # Assertion
         self.assertEqual(result.component_name, "manager")
         self.assertEqual(result.component_type, ComponentType.INTERNAL)
         self.assertEqual(result.status, HealthCheckStatus.WARN)
         self.assertEqual(
             result.output,
-            "some tx_jobs in the last 5 minutes took more than 10 seconds to be solved",
+            "We had 0 failed jobs and 1 long running jobs in the last 5 minutes",
         )
 
     async def test_get_health_check_ok(self):
+        # Preparation
         self.manager.has_any_miner.return_value = True
         self.manager.has_any_submitted_job_in_period.return_value = True
         job = MagicMock()
         job.is_failed.return_value = False
         job.total_time = 9
         self.manager.tx_jobs = {"job_id": job}
+        # Execution
         result = await self.mining_health_check.get_health_check()
+        # Assertion
         self.assertEqual(result.component_name, "manager")
         self.assertEqual(result.component_type, ComponentType.INTERNAL)
         self.assertEqual(result.status, HealthCheckStatus.PASS)
-        self.assertEqual(result.output, "everything is ok")
+        self.assertEqual(result.output, "Everything is ok")
+
+    # Patch datetime.utcnow() to return a fixed value
+    @patch("txstratum.healthcheck.models.datetime")
+    async def test_return_last_status(self, datetime_mock):
+        """
+        This tests the case where we have no tx_jobs in the last 5 minutes, but we had a previous status of failure.
+
+        We should return the previous status and include its output in the new output.
+        """
+        # Preparation
+        self.manager.has_any_miner.return_value = True
+        self.manager.has_any_submitted_job_in_period.return_value = True
+        self.manager.tx_jobs = {}
+        mock_date = datetime(2021, 1, 1, 0, 0, 0)
+        datetime_mock.utcnow.return_value = mock_date
+        self.mining_health_check.last_manager_status.update(
+            status=HealthCheckStatus.FAIL,
+            output="We had 1 failed jobs and 0 long running jobs in the last 5 minutes",
+        )
+        # Execution
+        result = await self.mining_health_check.get_health_check()
+        # Assertion
+        self.assertEqual(result.component_name, "manager")
+        self.assertEqual(result.component_type, ComponentType.INTERNAL)
+        self.assertEqual(result.status, HealthCheckStatus.FAIL)
+        self.assertEqual(
+            result.output,
+            f"We had no tx_jobs in the last 5 minutes, so we are just returning the last observed status from {mock_date.strftime('%Y-%m-%dT%H:%M:%SZ')}. The output was: We had 1 failed jobs and 0 long running jobs in the last 5 minutes",
+        )
 
 
 class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
@@ -140,10 +186,10 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
 
         result = await self.health_check.get_health_check()
         self.assertEqual(result.checks["manager"][0].status, HealthCheckStatus.PASS)
-        self.assertEqual(result.checks["manager"][0].output, "everything is ok")
+        self.assertEqual(result.checks["manager"][0].output, "Everything is ok")
         self.assertEqual(result.checks["fullnode"][0].status, HealthCheckStatus.PASS)
         self.assertEqual(
-            result.checks["fullnode"][0].output, "fullnode is responding correctly"
+            result.checks["fullnode"][0].output, "Fullnode is responding correctly"
         )
         self.assertEqual(result.status, HealthCheckStatus.PASS)
 
@@ -161,10 +207,10 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
 
         result = await self.health_check.get_health_check()
         self.assertEqual(result.checks["manager"][0].status, HealthCheckStatus.PASS)
-        self.assertEqual(result.checks["manager"][0].output, "everything is ok")
+        self.assertEqual(result.checks["manager"][0].output, "Everything is ok")
         self.assertEqual(result.checks["fullnode"][0].status, HealthCheckStatus.FAIL)
         self.assertEqual(
-            result.checks["fullnode"][0].output, "couldn't connect to fullnode: error"
+            result.checks["fullnode"][0].output, "Couldn't connect to fullnode: error"
         )
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
 
@@ -184,10 +230,10 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.checks["manager"][0].status, HealthCheckStatus.FAIL)
         self.assertEqual(
             result.checks["manager"][0].output,
-            "no miners submitted a job in the last 1 hour",
+            "No miners submitted a job in the last 1 hour",
         )
         self.assertEqual(result.checks["fullnode"][0].status, HealthCheckStatus.PASS)
         self.assertEqual(
-            result.checks["fullnode"][0].output, "fullnode is responding correctly"
+            result.checks["fullnode"][0].output, "Fullnode is responding correctly"
         )
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
