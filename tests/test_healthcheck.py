@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import asynctest  # type: ignore[import]
 
-from txstratum.healthcheck import (
+from txstratum.healthcheck.healthcheck import (
     ComponentType,
     FullnodeHealthCheck,
     HealthCheck,

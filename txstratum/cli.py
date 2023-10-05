@@ -17,7 +17,7 @@ from structlog import get_logger
 
 from txstratum.api import App
 from txstratum.filters import FileFilter, TOIFilter, TXFilter
-from txstratum.healthcheck import HealthCheck
+from txstratum.healthcheck.healthcheck import HealthCheck
 from txstratum.manager import TxMiningManager
 from txstratum.pubsub import PubSubManager
 from txstratum.toi_client import TOIAsyncClient
