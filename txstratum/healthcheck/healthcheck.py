@@ -94,12 +94,15 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
     If there are miners, but any of them has submitted a job in the last 1 hour, the health check
     will be returned as 'fail'
     """
+    NO_JOBS_SUBMITTED_THRESHOLD = 3600  # 1 hour
+    JOB_MINING_TIME_THRESHOLD = 10  # 10 seconds
+    COMPONENT_NAME = "manager"
 
     def __init__(self, manager: "TxMiningManager") -> None:
         """Init the class with the manager instance."""
         self.manager = manager
         self.last_manager_status = ComponentHealthCheck(
-            component_name="manager",
+            component_name=self.COMPONENT_NAME,
             component_type=ComponentType.INTERNAL,
             status=HealthCheckStatus.PASS,
             output="everything is ok",
@@ -110,16 +113,16 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
         # Check that the manager has at least 1 miner
         if not self.manager.has_any_miner():
             return ComponentHealthCheck(
-                component_name="manager",
+                component_name=self.COMPONENT_NAME,
                 component_type=ComponentType.INTERNAL,
                 status=HealthCheckStatus.FAIL,
                 output="no miners connected",
             )
 
         # Check that all the miners submitted in the last 1 hour. If not, return failed.
-        if not self.manager.has_any_submitted_job_in_period(period=3600):
+        if not self.manager.has_any_submitted_job_in_period(period=self.NO_JOBS_SUBMITTED_THRESHOLD):
             return ComponentHealthCheck(
-                component_name="manager",
+                component_name=self.COMPONENT_NAME,
                 component_type=ComponentType.INTERNAL,
                 status=HealthCheckStatus.FAIL,
                 output="no miners submitted a job in the last 1 hour",
@@ -144,7 +147,7 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
                     job.total_time is not None
                 ), "total_time must be set if job is done"
 
-                if job.total_time > 10:
+                if job.total_time > self.JOB_MINING_TIME_THRESHOLD:
                     self.last_manager_status.update(
                         {
                             "status": HealthCheckStatus.WARN,
