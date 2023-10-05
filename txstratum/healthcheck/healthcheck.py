@@ -94,6 +94,7 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
     If there are miners, but any of them has submitted a job in the last 1 hour, the health check
     will be returned as 'fail'
     """
+
     NO_JOBS_SUBMITTED_THRESHOLD = 3600  # 1 hour
     JOB_MINING_TIME_THRESHOLD = 10  # 10 seconds
     COMPONENT_NAME = "manager"
@@ -132,26 +133,29 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
             # We just return the last saved status in case there are no jobs in the last 5 minutes
             return self.last_manager_status
 
+        failed_jobs = []
+        long_running_jobs = []
+
         for job in self.manager.tx_jobs.values():
             if job.is_failed():
-                self.last_manager_status.update(
-                    status=HealthCheckStatus.FAIL,
-                    output="some tx_jobs in the last 5 minutes have failed",
-                )
-
-                return self.last_manager_status
+                failed_jobs.append(job)
             if job.is_done():
                 assert (
                     job.total_time is not None
                 ), "total_time must be set if job is done"
 
                 if job.total_time > self.JOB_MINING_TIME_THRESHOLD:
-                    self.last_manager_status.update(
-                        status=HealthCheckStatus.WARN,
-                        output="some tx_jobs in the last 5 minutes took more than 10 seconds to be solved",
-                    )
+                    long_running_jobs.append(job)
 
-                    return self.last_manager_status
+        if failed_jobs or long_running_jobs:
+            self.last_manager_status.update(
+                status=HealthCheckStatus.FAIL
+                if failed_jobs
+                else HealthCheckStatus.WARN,
+                output=f"we had {len(failed_jobs)} failed jobs and {len(long_running_jobs)} long running jobs in the last 5 minutes",
+            )
+
+            return self.last_manager_status
 
         self.last_manager_status.update(
             status=HealthCheckStatus.PASS, output="everything is ok"
