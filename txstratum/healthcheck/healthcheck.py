@@ -65,9 +65,9 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
             await self.backend.version()
 
             return health_check
-        except Exception:
+        except Exception as e:
             health_check.status = HealthCheckStatus.FAIL
-            health_check.output = "couldn't connect to fullnode"
+            health_check.output = f"couldn't connect to fullnode: {str(e)}"
 
             return health_check
 
