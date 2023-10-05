@@ -33,7 +33,7 @@ class ComponentHealthCheck:
     observed_value: Optional[str] = None
     observed_unit: Optional[str] = None
 
-    def update(self, new_values: Dict[str, Any]) -> None:
+    def update(self, **new_values: Any) -> None:
         """
         Update the object with the new values passed as kwargs.
 

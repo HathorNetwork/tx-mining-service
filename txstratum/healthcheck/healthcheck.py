@@ -135,10 +135,8 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
         for job in self.manager.tx_jobs.values():
             if job.is_failed():
                 self.last_manager_status.update(
-                    {
-                        "status": HealthCheckStatus.FAIL,
-                        "output": "some tx_jobs in the last 5 minutes have failed",
-                    }
+                    status=HealthCheckStatus.FAIL,
+                    output="some tx_jobs in the last 5 minutes have failed",
                 )
 
                 return self.last_manager_status
@@ -149,16 +147,14 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
 
                 if job.total_time > self.JOB_MINING_TIME_THRESHOLD:
                     self.last_manager_status.update(
-                        {
-                            "status": HealthCheckStatus.WARN,
-                            "output": "some tx_jobs in the last 5 minutes took more than 10 seconds to be solved",
-                        }
+                        status=HealthCheckStatus.WARN,
+                        output="some tx_jobs in the last 5 minutes took more than 10 seconds to be solved",
                     )
 
                     return self.last_manager_status
 
         self.last_manager_status.update(
-            {"status": HealthCheckStatus.PASS, "output": "everything is ok"}
+            status=HealthCheckStatus.PASS, output="everything is ok"
         )
 
         return self.last_manager_status

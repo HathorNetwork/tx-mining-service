@@ -43,7 +43,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.component_name, "fullnode")
         self.assertEqual(result.component_type, ComponentType.FULLNODE)
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
-        self.assertEqual(result.output, "couldn't connect to fullnode")
+        self.assertEqual(result.output, "couldn't connect to fullnode: error")
         self.assertEqual(result.component_id, "http://localhost:8080")
 
 
@@ -164,7 +164,7 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.checks["manager"][0].output, "everything is ok")
         self.assertEqual(result.checks["fullnode"][0].status, HealthCheckStatus.FAIL)
         self.assertEqual(
-            result.checks["fullnode"][0].output, "couldn't connect to fullnode"
+            result.checks["fullnode"][0].output, "couldn't connect to fullnode: error"
         )
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
 
