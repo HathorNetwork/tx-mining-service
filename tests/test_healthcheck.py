@@ -91,7 +91,8 @@ class TestMiningHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.component_type, ComponentType.INTERNAL)
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
         self.assertEqual(
-            result.output, "We had 1 failed jobs and 0 long running jobs in the last 5 minutes"
+            result.output,
+            "We had 1 failed jobs and 0 long running jobs in the last 5 minutes",
         )
 
     async def test_get_health_check_slow_job(self):
@@ -155,7 +156,11 @@ class TestMiningHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.status, HealthCheckStatus.FAIL)
         self.assertEqual(
             result.output,
-            f"We had no tx_jobs in the last 5 minutes, so we are just returning the last observed status from {mock_date.strftime('%Y-%m-%dT%H:%M:%SZ')}. The output was: We had 1 failed jobs and 0 long running jobs in the last 5 minutes",
+            (
+                "We had no tx_jobs in the last 5 minutes, so we are just returning the last observed status from"
+                f" {mock_date.strftime('%Y-%m-%dT%H:%M:%SZ')}. The output was: We had 1 failed jobs and 0 long"
+                " running jobs in the last 5 minutes"
+            ),
         )
 
 

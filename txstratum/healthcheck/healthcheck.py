@@ -4,7 +4,13 @@ from typing import TYPE_CHECKING, List
 
 from hathorlib.client import HathorClient
 
-from txstratum.healthcheck.models import ComponentHealthCheck, ComponentHealthCheckInterface, ComponentType, HealthCheckResult, HealthCheckStatus
+from txstratum.healthcheck.models import (
+    ComponentHealthCheck,
+    ComponentHealthCheckInterface,
+    ComponentType,
+    HealthCheckResult,
+    HealthCheckStatus,
+)
 
 if TYPE_CHECKING:
     from txstratum.manager import TxMiningManager
@@ -25,7 +31,9 @@ class HealthCheck:
 
     async def get_health_check(self) -> HealthCheckResult:
         """Return the health check status for the tx-mining-service."""
-        components_health_checks = await asyncio.gather(*[c.get_health_check() for c in self.health_check_components])
+        components_health_checks = await asyncio.gather(
+            *[c.get_health_check() for c in self.health_check_components]
+        )
         components_status = {c.status for c in components_health_checks}
 
         overall_status = HealthCheckStatus.PASS
@@ -121,7 +129,9 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
             )
 
         # Check that all the miners submitted in the last 1 hour. If not, return failed.
-        if not self.manager.has_any_submitted_job_in_period(period=self.NO_JOBS_SUBMITTED_THRESHOLD):
+        if not self.manager.has_any_submitted_job_in_period(
+            period=self.NO_JOBS_SUBMITTED_THRESHOLD
+        ):
             return ComponentHealthCheck(
                 component_name=self.COMPONENT_NAME,
                 component_type=ComponentType.INTERNAL,
@@ -134,7 +144,10 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
                 component_name=self.COMPONENT_NAME,
                 component_type=ComponentType.INTERNAL,
                 status=self.last_manager_status.status,
-                output=f"We had no tx_jobs in the last 5 minutes, so we are just returning the last observed status from {self.last_manager_status.time}. The output was: {self.last_manager_status.output}"
+                output=(
+                    "We had no tx_jobs in the last 5 minutes, so we are just returning the last observed"
+                    f" status from {self.last_manager_status.time}. The output was: {self.last_manager_status.output}"
+                ),
             )
 
         failed_jobs = []
@@ -156,7 +169,10 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
                 status=HealthCheckStatus.FAIL
                 if failed_jobs
                 else HealthCheckStatus.WARN,
-                output=f"We had {len(failed_jobs)} failed jobs and {len(long_running_jobs)} long running jobs in the last 5 minutes",
+                output=(
+                    f"We had {len(failed_jobs)} failed jobs and {len(long_running_jobs)}"
+                    " long running jobs in the last 5 minutes"
+                ),
             )
 
             return self.last_manager_status

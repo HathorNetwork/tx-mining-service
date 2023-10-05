@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+
 class ComponentType(str, Enum):
     """Enum used to store the component types that can be used in the HealthCheckComponentStatus class."""
 
@@ -112,4 +113,3 @@ class ComponentHealthCheckInterface(ABC):
     async def get_health_check(self) -> ComponentHealthCheck:
         """Return the health check status for the component."""
         raise NotImplementedError()
-
