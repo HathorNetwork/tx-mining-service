@@ -52,6 +52,8 @@ class HealthCheck:
 class FullnodeHealthCheck(ComponentHealthCheckInterface):
     """This class will check the health of the fullnode by sending a request to its /v1a/health."""
 
+    COMPONENT_NAME = "fullnode"
+
     def __init__(self, backend: "HathorClient") -> None:
         """Init the class with the fullnode backend."""
         self.backend = backend
@@ -59,7 +61,7 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
     async def get_health_check(self) -> ComponentHealthCheck:
         """Return the fullnode health check status."""
         health_check = ComponentHealthCheck(
-            component_name="fullnode",
+            component_name=self.COMPONENT_NAME,
             component_type=ComponentType.FULLNODE,
             # TODO: Ideally we should not use private fields. We'll fix this when fixing line 170
             component_id=self.backend._base_url,
