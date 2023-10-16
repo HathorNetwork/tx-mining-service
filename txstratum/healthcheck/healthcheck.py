@@ -63,7 +63,8 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
         health_check = ComponentHealthCheck(
             component_name=self.COMPONENT_NAME,
             component_type=ComponentType.FULLNODE,
-            # TODO: Ideally we should not use private fields. We'll fix this when fixing line 170
+            # TODO: Ideally we should not use private fields.
+            #   We'll fix this when fixing line 74 below about getting the health information from the fullnode.
             component_id=self.backend._base_url,
             status=HealthCheckStatus.PASS,
             time=datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -96,12 +97,12 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
     If at least one of the 'tx_jobs' has a 'total_time' of more than 10 seconds, the health check
     will be returned as 'warn'.
 
-    If some of the 'tx_jobs' has status different than 'done', the health check will be returned
+    If any of the 'tx_jobs' has status different than 'done', the health check will be returned
     as 'fail'.
 
     If there are no miners, the health check will be returned as 'fail'
 
-    If there are miners, but any of them has submitted a job in the last 1 hour, the health check
+    If there are miners, but none of them has submitted a job in the last 1 hour, the health check
     will be returned as 'fail'
     """
 
