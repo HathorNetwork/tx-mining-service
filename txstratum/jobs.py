@@ -79,6 +79,14 @@ class TxJob:
         self._timeout_timer: Optional[TimerHandle] = None
         self._cleanup_timer: Optional[TimerHandle] = None
 
+    def is_failed(self) -> bool:
+        """Return True if job has any status that indicates failure."""
+        return self.status in [JobStatus.FAILED, JobStatus.TIMEOUT, JobStatus.CANCELLED]
+
+    def is_done(self) -> bool:
+        """Return True if job has any status that indicates success."""
+        return self.status in [JobStatus.DONE]
+
     def get_tx(self) -> BaseTransaction:
         """Return the Transaction object of this job."""
         return self._tx

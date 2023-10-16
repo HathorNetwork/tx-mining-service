@@ -118,6 +118,19 @@ class TxMiningManager:
         self.connections.pop(protocol.miner_id)
         self.miners.pop(protocol.miner_id, None)
 
+    def has_any_miner(self) -> bool:
+        """Return True if there is at least one miner connected."""
+        return len(self.miners) > 0
+
+    def has_any_submitted_job_in_period(self, period: int) -> bool:
+        """Return True if there is at least one miner that submitted a job in the last `period` seconds."""
+        now = txstratum.time.time()
+
+        for miner in self.miners.values():
+            if miner.last_submit_at > 0 and now - miner.last_submit_at < period:
+                return True
+        return False
+
     def shutdown(self) -> None:
         """Tasks to be executed before the service is shut down."""
         self.refuse_new_jobs = True
