@@ -1,15 +1,15 @@
-import asyncio
+from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from hathorlib.client import HathorClient
-
-from txstratum.healthcheck.models import (
-    ComponentHealthCheck,
-    ComponentHealthCheckInterface,
-    ComponentType,
-    HealthCheckResult,
-    HealthCheckStatus,
+from healthcheck import (
+    Healthcheck,
+    HealthcheckCallbackResponse,
+    HealthcheckHTTPComponent,
+    HealthcheckInternalComponent,
+    HealthcheckResponse,
+    HealthcheckStatus,
 )
 
 if TYPE_CHECKING:
@@ -24,29 +24,40 @@ class HealthCheck:
 
     def __init__(self, manager: "TxMiningManager", backend: "HathorClient") -> None:
         """Init the class with the components that will be checked."""
-        self.health_check_components: List[ComponentHealthCheckInterface] = [
-            MiningHealthCheck(manager),
-            FullnodeHealthCheck(backend),
-        ]
+        self.healthcheck = Healthcheck("TxMiningService")
 
-    async def get_health_check(self) -> HealthCheckResult:
+        mining_healthcheck = MiningHealthCheck(manager)
+        mining_healthcheck_component = HealthcheckInternalComponent(
+            mining_healthcheck.COMPONENT_NAME
+        )
+        mining_healthcheck_component.add_healthcheck(
+            mining_healthcheck.get_health_check
+        )
+
+        fullnode_healthcheck = FullnodeHealthCheck(backend)
+        fullnode_healthcheck_component = HealthcheckHTTPComponent(
+            name=fullnode_healthcheck.COMPONENT_NAME,
+            id=backend._base_url,
+        )
+        fullnode_healthcheck_component.add_healthcheck(
+            fullnode_healthcheck.get_health_check
+        )
+
+        self.healthcheck.add_component(mining_healthcheck_component)
+        self.healthcheck.add_component(fullnode_healthcheck_component)
+
+    async def get_health_check(self) -> HealthcheckResponse:
         """Return the health check status for the tx-mining-service."""
-        components_health_checks = await asyncio.gather(
-            *[c.get_health_check() for c in self.health_check_components]
-        )
-        components_status = {c.status for c in components_health_checks}
+        return await self.healthcheck.run()
 
-        overall_status = HealthCheckStatus.PASS
-        if HealthCheckStatus.FAIL in components_status:
-            overall_status = HealthCheckStatus.FAIL
-        elif HealthCheckStatus.WARN in components_status:
-            overall_status = HealthCheckStatus.WARN
 
-        return HealthCheckResult(
-            status=overall_status,
-            description="health of tx-mining-service",
-            checks={c.component_name: [c] for c in components_health_checks},
-        )
+class ComponentHealthCheckInterface(ABC):
+    """This is an interface to be used by other classes implementing health checks for components."""
+
+    @abstractmethod
+    async def get_health_check(self) -> HealthcheckCallbackResponse:
+        """Return the health check status for the component."""
+        raise NotImplementedError()
 
 
 class FullnodeHealthCheck(ComponentHealthCheckInterface):
@@ -58,16 +69,10 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
         """Init the class with the fullnode backend."""
         self.backend = backend
 
-    async def get_health_check(self) -> ComponentHealthCheck:
+    async def get_health_check(self) -> HealthcheckCallbackResponse:
         """Return the fullnode health check status."""
-        health_check = ComponentHealthCheck(
-            component_name=self.COMPONENT_NAME,
-            component_type=ComponentType.FULLNODE,
-            # TODO: Ideally we should not use private fields.
-            #   We'll fix this when fixing line 74 below about getting the health information from the fullnode.
-            component_id=self.backend._base_url,
-            status=HealthCheckStatus.PASS,
-            time=datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        response = HealthcheckCallbackResponse(
+            status=HealthcheckStatus.PASS,
             output="Fullnode is responding correctly",
         )
 
@@ -75,12 +80,12 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
             # TODO: We need to get the health information from the fullnode, but it's not implemented yet
             await self.backend.version()
 
-            return health_check
+            return response
         except Exception as e:
-            health_check.status = HealthCheckStatus.FAIL
-            health_check.output = f"Couldn't connect to fullnode: {str(e)}"
+            response.status = HealthcheckStatus.FAIL
+            response.output = f"Couldn't connect to fullnode: {str(e)}"
 
-            return health_check
+            return response
 
 
 class MiningHealthCheck(ComponentHealthCheckInterface):
@@ -113,21 +118,28 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
     def __init__(self, manager: "TxMiningManager") -> None:
         """Init the class with the manager instance."""
         self.manager = manager
-        self.last_manager_status = ComponentHealthCheck(
-            component_name=self.COMPONENT_NAME,
-            component_type=ComponentType.INTERNAL,
-            status=HealthCheckStatus.PASS,
+        self.last_response = HealthcheckCallbackResponse(
+            status=HealthcheckStatus.PASS,
             output="everything is ok",
         )
+        self.last_response_update_time = datetime.utcnow().strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
 
-    async def get_health_check(self) -> ComponentHealthCheck:
+    def _update_last_response(self, status: HealthcheckStatus, output: str) -> None:
+        """Update the last_response object with the new values."""
+        self.last_response.status = status
+        self.last_response.output = output
+        self.last_response_update_time = datetime.utcnow().strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+    async def get_health_check(self) -> HealthcheckCallbackResponse:
         """Return the manager health check status."""
         # Check that the manager has at least 1 miner
         if not self.manager.has_any_miner():
-            return ComponentHealthCheck(
-                component_name=self.COMPONENT_NAME,
-                component_type=ComponentType.INTERNAL,
-                status=HealthCheckStatus.FAIL,
+            return HealthcheckCallbackResponse(
+                status=HealthcheckStatus.FAIL,
                 output="No miners connected",
             )
 
@@ -135,21 +147,17 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
         if not self.manager.has_any_submitted_job_in_period(
             period=self.NO_JOBS_SUBMITTED_THRESHOLD
         ):
-            return ComponentHealthCheck(
-                component_name=self.COMPONENT_NAME,
-                component_type=ComponentType.INTERNAL,
-                status=HealthCheckStatus.FAIL,
+            return HealthcheckCallbackResponse(
+                status=HealthcheckStatus.FAIL,
                 output="No miners submitted a job in the last 1 hour",
             )
 
         if not self.manager.tx_jobs:
-            return ComponentHealthCheck(
-                component_name=self.COMPONENT_NAME,
-                component_type=ComponentType.INTERNAL,
-                status=self.last_manager_status.status,
+            return HealthcheckCallbackResponse(
+                status=self.last_response.status,
                 output=(
                     "We had no tx_jobs in the last 5 minutes, so we are just returning the last observed"
-                    f" status from {self.last_manager_status.time}. The output was: {self.last_manager_status.output}"
+                    f" status from {self.last_response_update_time}. The output was: {self.last_response.output}"
                 ),
             )
 
@@ -168,20 +176,20 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
                     long_running_jobs.append(job)
 
         if failed_jobs or long_running_jobs:
-            self.last_manager_status.update(
-                status=HealthCheckStatus.FAIL
+            self._update_last_response(
+                status=HealthcheckStatus.FAIL
                 if failed_jobs
-                else HealthCheckStatus.WARN,
+                else HealthcheckStatus.WARN,
                 output=(
                     f"We had {len(failed_jobs)} failed jobs and {len(long_running_jobs)}"
                     " long running jobs in the last 5 minutes"
                 ),
             )
 
-            return self.last_manager_status
+            return self.last_response
 
-        self.last_manager_status.update(
-            status=HealthCheckStatus.PASS, output="Everything is ok"
+        self._update_last_response(
+            status=HealthcheckStatus.PASS, output="Everything is ok"
         )
 
-        return self.last_manager_status
+        return self.last_response
