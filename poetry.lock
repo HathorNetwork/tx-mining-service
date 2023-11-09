@@ -1108,14 +1108,15 @@ name = "python-healthchecklib"
 version = "0.1.0"
 description = "Opinionated healthcheck library"
 optional = false
-python-versions = ">=3.8.1,<4.0.0"
-files = [
-    {file = "python_healthchecklib-0.1.0-py3-none-any.whl", hash = "sha256:ba8d8cca119394c2809e6e7a7ae9a23f286391481d09577893fe90fc66b72a79"},
-]
+python-versions = "^3.8.1"
+files = []
+develop = false
 
 [package.source]
-type = "file"
-url = "../python-healthchecklib/dist/python_healthchecklib-0.1.0-py3-none-any.whl"
+type = "git"
+url = "https://github.com/hathornetwork/python-healthcheck-lib"
+reference = "HEAD"
+resolved_reference = "a01437ca68a16dc8b9d451676926431c08bfe51e"
 
 [[package]]
 name = "snowballstemmer"
@@ -1257,4 +1258,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4.0"
-content-hash = "503dad47ad57b68f4dc4ba191b13ef40050e75d296151cabfccbf6cb82c73f35"
+content-hash = "b05b4df24d400b44193921af93facbb601a544ac2972e163f2079640bc58e34f"
