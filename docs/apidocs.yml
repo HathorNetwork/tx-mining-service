@@ -19,6 +19,84 @@ paths:
                   summary: Success
                   value:
                     success: true
+  /health:
+    get:
+      summary: Check if the service and its components are up and running
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              examples:
+                success:
+                  summary: Success
+                  value:
+                    status: pass
+                    description: Health status of TxMiningService
+                    checks:
+                      manager:
+                        - status: pass
+                          output: Everything is OK
+                          component_name: manager
+                          component_type: internal
+                      fullnode:
+                        - status: pass
+                          output: Fullnode is responding correctly
+                          component_name: fullnode
+                          component_type: http
+        '503':
+          description: Service Unhealthy
+          content:
+            application/json:
+              examples:
+                no-miners:
+                  summary: No miners connected
+                  value:
+                    status: fail
+                    description: Health status of TxMiningService
+                    checks:
+                      manager:
+                        - status: fail
+                          output: No miners connected
+                          component_name: manager
+                          component_type: internal
+                      fullnode:
+                        - status: pass
+                          output: Fullnode is responding correctly
+                          component_name: fullnode
+                          component_type: http
+                fullnode-not-responding:
+                  summary: Fullnode is not responding
+                  value:
+                    status: fail
+                    description: Health status of TxMiningService
+                    checks:
+                      manager:
+                        - status: pass
+                          output: Everything is OK
+                          component_name: manager
+                          component_type: internal
+                      fullnode:
+                        - status: fail
+                          output: "Couldn't connect to fullnode: error"
+                          component_name: fullnode
+                          component_type: http
+                no-jobs-submitted:
+                  summary: No jobs submitted
+                  value:
+                    status: fail
+                    description: Health status of TxMiningService
+                    checks:
+                      manager:
+                        - status: fail
+                          output: No miners submitted a job in the last 1 hour
+                          component_name: manager
+                          component_type: internal
+                      fullnode:
+                        - status: pass
+                          output: Fullnode is responding correctly
+                          component_name: fullnode
+                          component_type: http
   /mining-status:
     get:
       summary: General information and statistics about mining
