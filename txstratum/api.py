@@ -15,6 +15,7 @@ from structlog import get_logger
 
 import txstratum.time
 from txstratum.exceptions import JobAlreadyExists, NewJobRefused
+from txstratum.healthcheck.healthcheck import HealthCheck
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.middleware import create_middleware_version_check
 
@@ -45,6 +46,7 @@ class App:
     def __init__(
         self,
         manager: "TxMiningManager",
+        health_check: "HealthCheck",
         *,
         max_tx_weight: Optional[float] = None,
         max_timestamp_delta: Optional[int] = None,
@@ -61,6 +63,7 @@ class App:
         super().__init__()
         self.log = logger.new()
         self.manager = manager
+        self.health_check_manager = health_check
         self.max_tx_weight: float = max_tx_weight or MAX_TX_WEIGHT
         self.max_output_script_size = max_output_script_size or MAX_OUTPUT_SCRIPT_SIZE
         self.max_timestamp_delta: float = max_timestamp_delta or MAX_TIMESTAMP_DELTA
@@ -77,6 +80,7 @@ class App:
             ]
         )
         self.app.router.add_get("/health-check", self.health_check)
+        self.app.router.add_get("/health", self.health)
         self.app.router.add_get("/mining-status", self.mining_status)
         self.app.router.add_get("/job-status", self.job_status)
         self.app.router.add_post("/submit-job", self.submit_job)
@@ -84,6 +88,14 @@ class App:
 
         self.fix_invalid_timestamp: bool = fix_invalid_timestamp
 
+    async def health(self, request: web.Request) -> web.Response:
+        """Return the health check status for the tx-mining-service."""
+        health_check_result = await self.health_check_manager.get_health_check()
+        http_status = health_check_result.get_http_status_code()
+
+        return web.json_response(health_check_result.to_json(), status=http_status)
+
+    # XXX: DEPRECATED, Use /health instead
     async def health_check(self, request: web.Request) -> web.Response:
         """Return that the service is running."""
         return web.json_response({"success": True})
