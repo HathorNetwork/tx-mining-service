@@ -71,21 +71,29 @@ class FullnodeHealthCheck(ComponentHealthCheckInterface):
 
     async def get_health_check(self) -> HealthcheckCallbackResponse:
         """Return the fullnode health check status."""
-        response = HealthcheckCallbackResponse(
-            status=HealthcheckStatus.PASS,
-            output="Fullnode is responding correctly",
-        )
-
         try:
-            # TODO: We need to get the health information from the fullnode, but it's not implemented yet
-            await self.backend.version()
+            health = await self.backend.health()
 
-            return response
+            if health["status"] in [HealthcheckStatus.FAIL, HealthcheckStatus.WARN]:
+                return HealthcheckCallbackResponse(
+                    status=HealthcheckStatus(health["status"]),
+                    output="Fullnode is not healthy: %s" % str(health),
+                )
+            elif health["status"] == HealthcheckStatus.PASS:
+                return HealthcheckCallbackResponse(
+                    status=HealthcheckStatus.PASS,
+                    output="Fullnode is healthy",
+                )
+            else:
+                return HealthcheckCallbackResponse(
+                    status=HealthcheckStatus.FAIL,
+                    output="Fullnode returned invalid status: %s" % str(health),
+                )
         except Exception as e:
-            response.status = HealthcheckStatus.FAIL
-            response.output = f"Couldn't connect to fullnode: {str(e)}"
-
-            return response
+            return HealthcheckCallbackResponse(
+                status=HealthcheckStatus.FAIL,
+                output=f"Couldn't connect to fullnode: {str(e)}",
+            )
 
 
 class MiningHealthCheck(ComponentHealthCheckInterface):

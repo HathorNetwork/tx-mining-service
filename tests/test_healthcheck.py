@@ -13,8 +13,8 @@ from txstratum.healthcheck.healthcheck import (
 class HathorClientMock:
     _base_url = "http://localhost:8080"
 
-    async def version(self):
-        return {"version": "1.0.0"}
+    async def health(self):
+        return {"status": "pass"}
 
 
 class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
@@ -26,25 +26,51 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
 
     async def test_get_health_check_with_a_healthy_fullnode(self):
         """Test the response we should generated for a healthy fullnode"""
-        # Mock the implementation of the hathor_client.version.
+        # Mock the implementation of the hathor_client.health.
         async def side_effect():
-            return {"version": "1.0.0"}
+            return {"status": "pass"}
 
-        self.mock_hathor_client.version.side_effect = side_effect
+        self.mock_hathor_client.health.side_effect = side_effect
         self.mock_hathor_client._base_url = "http://localhost:8080"
 
         result = await self.fullnode_health_check.get_health_check()
         self.assertEqual(result.status, "pass")
-        self.assertEqual(result.output, "Fullnode is responding correctly")
+        self.assertEqual(result.output, "Fullnode is healthy")
 
-    async def test_get_health_check_with_an_unhealthy_fullnode(self):
+    async def test_get_health_check_raises_exception(self):
         """Test the response we should generated for an unhealthy fullnode"""
-        self.mock_hathor_client.version.side_effect = Exception("error")
+        self.mock_hathor_client.health.side_effect = Exception("error")
         self.mock_hathor_client._base_url = "http://localhost:8080"
 
         result = await self.fullnode_health_check.get_health_check()
         self.assertEqual(result.status, "fail")
         self.assertEqual(result.output, "Couldn't connect to fullnode: error")
+
+    async def test_get_health_check_invalid_status(self):
+        """Test the response we should generated for an unhealthy fullnode"""
+        # Mock the implementation of the hathor_client.health.
+        async def side_effect():
+            return {"status": "invalid"}
+
+        self.mock_hathor_client.health.side_effect = side_effect
+        self.mock_hathor_client._base_url = "http://localhost:8080"
+
+        result = await self.fullnode_health_check.get_health_check()
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.output, "Fullnode returned invalid status: {'status': 'invalid'}")
+
+    async def test_get_health_check_unhealthy_fullnode(self):
+        """Test the response we should generated for an unhealthy fullnode"""
+        # Mock the implementation of the hathor_client.health.
+        async def side_effect():
+            return {"status": "fail"}
+
+        self.mock_hathor_client.health.side_effect = side_effect
+        self.mock_hathor_client._base_url = "http://localhost:8080"
+
+        result = await self.fullnode_health_check.get_health_check()
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.output, "Fullnode is not healthy: {'status': 'fail'}")
 
 
 class TestMiningHealthCheck(asynctest.TestCase):  # type: ignore[misc]
@@ -157,12 +183,12 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
 
     async def test_get_health_check_success(self):
         """Tests the response we should generate when everything is ok"""
-        # Mock the implementation of the hathor_client.version.
+        # Mock the implementation of the hathor_client.health.
         async def side_effect():
-            return {"version": "1.0.0"}
+            return {"status": "pass"}
 
-        self.mock_hathor_client.version = MagicMock()
-        self.mock_hathor_client.version.side_effect = side_effect
+        self.mock_hathor_client.health = MagicMock()
+        self.mock_hathor_client.health.side_effect = side_effect
 
         self.mock_hathor_client._base_url = "http://localhost:8080"
 
@@ -185,14 +211,14 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.checks["fullnode"][0].component_name, "fullnode")
         self.assertEqual(result.checks["fullnode"][0].component_type, "http")
         self.assertEqual(
-            result.checks["fullnode"][0].output, "Fullnode is responding correctly"
+            result.checks["fullnode"][0].output, "Fullnode is healthy"
         )
         self.assertEqual(result.status, HealthcheckStatus.PASS)
 
     async def test_get_health_check_fullnode_failure(self):
         """Tests the response we should generate when the fullnode is unhealthy"""
-        self.mock_hathor_client.version = MagicMock()
-        self.mock_hathor_client.version.side_effect = Exception("error")
+        self.mock_hathor_client.health = MagicMock()
+        self.mock_hathor_client.health.side_effect = Exception("error")
         self.mock_hathor_client._base_url = "http://localhost:8080"
 
         self.mock_manager.has_any_miner.return_value = True
@@ -213,12 +239,12 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
 
     async def test_get_health_check_mining_failure(self):
         """Tests the response we should generate when the mining is unhealthy"""
-        # Mock the implementation of the hathor_client.version.
+        # Mock the implementation of the hathor_client.health.
         async def side_effect():
-            return {"version": "1.0.0"}
+            return {"status": "pass"}
 
-        self.mock_hathor_client.version = MagicMock()
-        self.mock_hathor_client.version.side_effect = side_effect
+        self.mock_hathor_client.health = MagicMock()
+        self.mock_hathor_client.health.side_effect = side_effect
         self.mock_hathor_client._base_url = "http://localhost:8080"
 
         self.mock_manager.has_any_miner.return_value = True
@@ -232,6 +258,6 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         )
         self.assertEqual(result.checks["fullnode"][0].status, HealthcheckStatus.PASS)
         self.assertEqual(
-            result.checks["fullnode"][0].output, "Fullnode is responding correctly"
+            result.checks["fullnode"][0].output, "Fullnode is healthy"
         )
         self.assertEqual(result.status, HealthcheckStatus.FAIL)
