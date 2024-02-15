@@ -57,7 +57,9 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
 
         result = await self.fullnode_health_check.get_health_check()
         self.assertEqual(result.status, "fail")
-        self.assertEqual(result.output, "Fullnode returned invalid status: {'status': 'invalid'}")
+        self.assertEqual(
+            result.output, "Fullnode returned invalid status: {'status': 'invalid'}"
+        )
 
     async def test_get_health_check_unhealthy_fullnode(self):
         """Test the response we should generated for an unhealthy fullnode"""
@@ -210,9 +212,7 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         )
         self.assertEqual(result.checks["fullnode"][0].component_name, "fullnode")
         self.assertEqual(result.checks["fullnode"][0].component_type, "http")
-        self.assertEqual(
-            result.checks["fullnode"][0].output, "Fullnode is healthy"
-        )
+        self.assertEqual(result.checks["fullnode"][0].output, "Fullnode is healthy")
         self.assertEqual(result.status, HealthcheckStatus.PASS)
 
     async def test_get_health_check_fullnode_failure(self):
@@ -257,7 +257,5 @@ class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
             "No miners submitted a job in the last 1 hour",
         )
         self.assertEqual(result.checks["fullnode"][0].status, HealthcheckStatus.PASS)
-        self.assertEqual(
-            result.checks["fullnode"][0].output, "Fullnode is healthy"
-        )
+        self.assertEqual(result.checks["fullnode"][0].output, "Fullnode is healthy")
         self.assertEqual(result.status, HealthcheckStatus.FAIL)
