@@ -25,7 +25,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         )
 
     async def test_get_health_check_with_a_healthy_fullnode(self):
-        """Test the response we should generated for a healthy fullnode"""
+        """Test the response we should generate for a healthy fullnode"""
         # Mock the implementation of the hathor_client.health.
         async def side_effect():
             return {"status": "pass"}
@@ -38,7 +38,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.output, "Fullnode is healthy")
 
     async def test_get_health_check_raises_exception(self):
-        """Test the response we should generated for an unhealthy fullnode"""
+        """Test the response we should generate for an unhealthy fullnode"""
         self.mock_hathor_client.health.side_effect = Exception("error")
         self.mock_hathor_client._base_url = "http://localhost:8080"
 
@@ -47,7 +47,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.output, "Couldn't connect to fullnode: error")
 
     async def test_get_health_check_invalid_status(self):
-        """Test the response we should generated for an unhealthy fullnode"""
+        """Test the response we should generate for an unhealthy fullnode"""
         # Mock the implementation of the hathor_client.health.
         async def side_effect():
             return {"status": "invalid"}
@@ -62,7 +62,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         )
 
     async def test_get_health_check_unhealthy_fullnode(self):
-        """Test the response we should generated for an unhealthy fullnode"""
+        """Test the response we should generate for an unhealthy fullnode"""
         # Mock the implementation of the hathor_client.health.
         async def side_effect():
             return {"status": "fail"}
