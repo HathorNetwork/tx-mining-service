@@ -71,7 +71,7 @@ class StratumProtocol(JSONRPCProtocol):
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
     MAX_WEIGHT = 60.0  # maximum "difficulty" to assign to jobs
-    INITIAL_WEIGHT = 30.0  # initial "difficulty" to assign to jobs, can raise or drop based on solvetimes
+    INITIAL_WEIGHT = 25.0  # initial "difficulty" to assign to jobs, can raise or drop based on solvetimes
     MAX_JOBS = 1000  # maximum number of jobs to keep in memory
 
     MESSAGE_TIMEOUT = 30  # in seconds, timeout for messages that are not answered
@@ -372,8 +372,22 @@ class StratumProtocol(JSONRPCProtocol):
             # to solve the block.
             self.manager.submit_solution(self, job, obj.get_struct_nonce())
             if obj.is_block:
+                self.log.info(
+                    "Block solved: ",
+                    miner_id=self.miner_id,
+                    miner_type=self.miner_type,
+                    hashrate=self.hashrate_ghs,
+                    weight=job.get_weight(),
+                )
                 self.blocks_found += 1
             else:
+                self.log.info(
+                    "Transaction solved: ",
+                    miner_id=self.miner_id,
+                    miner_type=self.miner_type,
+                    hashrate=self.hashrate_ghs,
+                    weight=job.get_weight(),
+                )
                 self.txs_solved += 1
 
         else:
@@ -422,7 +436,7 @@ class StratumProtocol(JSONRPCProtocol):
         for x in self._submitted_work:
             delta += x.dt
             logwork = sum_weights(logwork, x.weight)
-        # calculate hashrate in TH/s
+        # calculate hashrate in GH/s
         self.hashrate_ghs = 2 ** (logwork - log2(delta) - 30)
         self.set_current_weight(logwork - log2(delta) + log2(self.TARGET_JOB_TIME))
 
