@@ -79,6 +79,9 @@ METRICS_PUBSUB = {
 }
 
 
+RTT_METRIC_NAME = "miner_rtt"
+
+
 class MetricData(NamedTuple):
     """Store collected data."""
 
@@ -137,6 +140,14 @@ class BasePrometheusExporter:
         for name, comment in METRIC_INFO.items():
             self.metric_gauges[name] = Gauge(name, comment, registry=self.registry)
 
+        # RTT miner metric
+        self.metric_gauges[RTT_METRIC_NAME] = Gauge(
+            RTT_METRIC_NAME,
+            "Miner RTT",
+            registry=self.registry,
+            labelnames=["miner_address"],
+        )
+
         for _, metric in METRICS_PUBSUB.items():
             self.registry.register(metric)
 
@@ -164,6 +175,12 @@ class BasePrometheusExporter:
         data = collect_metrics(self.manager)
         for metric_name in METRIC_INFO.keys():
             self.metric_gauges[metric_name].set(getattr(data, metric_name))
+
+        # Update each metrics for each miner
+        for miner in self.manager.miners.values():
+            self.metric_gauges[RTT_METRIC_NAME].labels(
+                miner_address=miner.miner_address_str
+            ).set(miner.rtt)
 
     def start(self) -> None:
         """Start exporter."""
@@ -212,6 +229,10 @@ class BasePrometheusExporter:
         METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
             1
         )
+        # Store default value (0) for miner rtt
+        self.metric_gauges[RTT_METRIC_NAME].labels(
+            miner_address=protocol.miner_address_str
+        ).set(0)
 
     async def _handle_protocol_miner_disconnected(
         self, protocol: StratumProtocol
@@ -219,6 +240,10 @@ class BasePrometheusExporter:
         METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
             0
         )
+        # Reset rtt value
+        self.metric_gauges[RTT_METRIC_NAME].labels(
+            miner_address=protocol.miner_address_str
+        ).set(0)
 
 
 class PrometheusExporter(BasePrometheusExporter):

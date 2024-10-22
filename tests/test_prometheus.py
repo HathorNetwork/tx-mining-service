@@ -32,7 +32,7 @@ class TxMiningManagerMock:
     """Mock TxMiningManager."""
 
     def __init__(self):
-        self.miners = ["miner1", "miner2"]
+        self.miners = {}
         self.block_template_error = 1
         self.txs_timeout = 2
         self.blocks_found = 3
@@ -74,6 +74,18 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(description_keys, metric_keys)
 
     async def test_update_metrics(self):
+        protocol = StratumProtocol(self.manager)
+        protocol.miner_address_str = "abc123"
+        protocol.miner_version = "cpuminer/1.0"
+        self.manager.miners["miner1"] = protocol
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol)
+
+        protocol2 = StratumProtocol(self.manager)
+        protocol2.miner_address_str = "def456"
+        protocol2.miner_version = "cpuminer/2.0"
+        self.manager.miners["miner2"] = protocol2
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol2)
+
         prometheus = PrometheusExporter(self.manager, self.pubsub, self.tmpdir)
         await prometheus.update_metrics()
         self.assertTrue(os.path.exists(prometheus.filepath))
@@ -83,10 +95,6 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
         txJob.created_at = 80
         txJob.started_at = 90
         txJob.submitted_at = 100
-
-        protocol = StratumProtocol(self.manager)
-        protocol.miner_address_str = "abc123"
-        protocol.miner_version = "cpuminer/1.0"
 
         self.pubsub.emit(
             TxMiningEvents.MANAGER_TX_SOLVED, {"tx_job": txJob, "protocol": protocol}

@@ -51,6 +51,7 @@ class MessageInTransit(NamedTuple):
     id: int  # Some miners, like cgminer, only support integer ids
     method: str
     timeout: float
+    created_at: float
 
 
 class StratumProtocol(JSONRPCProtocol):
@@ -67,6 +68,9 @@ class StratumProtocol(JSONRPCProtocol):
     JOB_UPDATE_INTERVAL = 2  # in seconds, to update the timestamp of the job
     MESSAGES_TIMEOUT_INTERVAL = (
         5  # in seconds, the interval to clear timed out messages
+    )
+    RTT_ESTIMATOR_INTERVAL = (
+        5  # in seconds, to estimate the RTT from application to miner
     )
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
@@ -89,7 +93,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.miner_id: str = str(uuid.uuid4())
         self.miner_address: Optional[bytes] = None
         self.miner_address_str: Optional[str] = None
-        self.miner_version: str = "unknown"
+        self.miner_version: Optional[str] = None
 
         self.jobs: MaxSizeOrderedDict[bytes, "MinerJob"] = MaxSizeOrderedDict(
             max=self.MAX_JOBS
@@ -97,6 +101,9 @@ class StratumProtocol(JSONRPCProtocol):
         self.current_job: Optional["MinerJob"] = None
         self.current_weight: float = self.INITIAL_WEIGHT
         self.hashrate_ghs: float = 0.0
+
+        self.rtt: float = 0.0
+        self.rtt_estimator_task: Optional[Periodic] = None
 
         self._submitted_work: List[SubmittedWork] = []
 
@@ -136,7 +143,7 @@ class StratumProtocol(JSONRPCProtocol):
     @property
     def miner_type(self) -> str:
         """Return the type of the connected miner."""
-        return self.miner_version.split("/")[0]
+        return self.miner_version.split("/")[0] if self.miner_version else "unknown"
 
     def handle_result(self, result: Any, msgid: JSONRPCId) -> None:
         """Handle a result from JSONRPC."""
@@ -151,8 +158,17 @@ class StratumProtocol(JSONRPCProtocol):
         message = self.messages_in_transit.pop(msgid)
 
         if message.method == "client.get_version":
-            self.log.info("Miner version: {}".format(result), miner_id=self.miner_id)
+            if self.miner_version is None:
+                # Logs only the first time, otherwise this log would appear a lot because
+                # we use this method to estimate the RTT
+                self.log.info(
+                    "Miner version: {}".format(result), miner_id=self.miner_id
+                )
             self.miner_version = result
+            now = txstratum.time.time()
+            current_rtt = now - message.created_at
+            alpha = 0.7
+            self.rtt = (1 - alpha) * self.rtt + alpha * current_rtt
         else:
             self.log.error(
                 "Cant handle result: {}".format(result),
@@ -169,11 +185,10 @@ class StratumProtocol(JSONRPCProtocol):
     def send_and_track_request(self, method: str, params: Any) -> None:
         """Send a request to the client and track it."""
         msgid = self.get_next_message_id()
+        now = txstratum.time.time()
 
         self.messages_in_transit[msgid] = MessageInTransit(
-            id=msgid,
-            method=method,
-            timeout=txstratum.time.time() + self.MESSAGE_TIMEOUT,
+            id=msgid, method=method, timeout=now + self.MESSAGE_TIMEOUT, created_at=now
         )
         self.send_request(method, params, msgid)
 
@@ -233,6 +248,17 @@ class StratumProtocol(JSONRPCProtocol):
                 self.messages_timeout_job, self.MESSAGES_TIMEOUT_INTERVAL
             )
             asyncio.ensure_future(self.messages_timeout_task.start())
+
+        if self.rtt_estimator_task is None:
+            # Start rtt estimator periodic task.
+            self.rtt_estimator_task = Periodic(
+                self.rtt_estimator, self.RTT_ESTIMATOR_INTERVAL
+            )
+            asyncio.ensure_future(self.rtt_estimator_task.start())
+
+    async def rtt_estimator(self) -> None:
+        """Period task to request the miner version to calculate the rtt."""
+        self.send_and_track_request("client.get_version", None)
 
     async def messages_timeout_job(self) -> None:
         """Period task to check for messages that have timed out."""
@@ -356,6 +382,10 @@ class StratumProtocol(JSONRPCProtocol):
         self.manager.pubsub.emit(TxMiningEvents.PROTOCOL_JOB_COMPLETED, self)
 
         if isinstance(job, MinerBlockJob):
+            # XXX We should consider tx jobs also but if the weight is too low comparing
+            # with the miner hashrate, latency and other things might affect this time
+            # Try to get Stratum RTT to consider in the `dt` calculus, so we
+            # can consider a MinerTxJob also as a submitted work
             assert job.started_at is not None
             dt = job.submitted_at - job.started_at
             self._submitted_work.append(

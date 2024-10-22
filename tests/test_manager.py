@@ -755,6 +755,10 @@ class ManagerTestCase(unittest.TestCase):
         # and that they were all the same txJob
         for c in conn.send_request.mock_calls:
             args = c[1]
+            if args[0] == "client.get_version":
+                # We now have a periodic task to get miner version
+                # in order to estimate rtt, so we must skip this request
+                continue
             job_data = args[1]
             self.assertEqual(job_data["clean"], False)
             self.assertEqual(
