@@ -47,13 +47,13 @@ METRICS_PUBSUB = {
     "txs_solved_weight": Histogram(
         "txs_solved_weight",
         "Txs solved histogram by tx weight",
-        buckets=(17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 29, 30, float("inf")),
+        buckets=(17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, float("inf")),
         labelnames=["miner_type"],
     ),
     "txs_timeout_weight": Histogram(
         "txs_timeout_weight",
         "Txs timeouts histogram by tx weight",
-        buckets=(17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 29, 30, float("inf")),
+        buckets=(17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, float("inf")),
     ),
     "txs_mining_time": Histogram(
         "txs_mining_time",
