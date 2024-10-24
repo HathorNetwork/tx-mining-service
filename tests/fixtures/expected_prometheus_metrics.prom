@@ -40,7 +40,13 @@ txs_solved_weight_bucket{le="20.0",miner_type="cpuminer"} 1.0
 txs_solved_weight_bucket{le="21.0",miner_type="cpuminer"} 1.0
 txs_solved_weight_bucket{le="22.0",miner_type="cpuminer"} 1.0
 txs_solved_weight_bucket{le="23.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="24.0",miner_type="cpuminer"} 1.0
 txs_solved_weight_bucket{le="25.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="26.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="27.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="28.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="29.0",miner_type="cpuminer"} 1.0
+txs_solved_weight_bucket{le="30.0",miner_type="cpuminer"} 1.0
 txs_solved_weight_bucket{le="+Inf",miner_type="cpuminer"} 1.0
 txs_solved_weight_count{miner_type="cpuminer"} 1.0
 txs_solved_weight_sum{miner_type="cpuminer"} 18.65677715840935
@@ -56,7 +62,13 @@ txs_timeout_weight_bucket{le="20.0"} 0.0
 txs_timeout_weight_bucket{le="21.0"} 0.0
 txs_timeout_weight_bucket{le="22.0"} 0.0
 txs_timeout_weight_bucket{le="23.0"} 0.0
+txs_timeout_weight_bucket{le="24.0"} 0.0
 txs_timeout_weight_bucket{le="25.0"} 0.0
+txs_timeout_weight_bucket{le="26.0"} 0.0
+txs_timeout_weight_bucket{le="27.0"} 0.0
+txs_timeout_weight_bucket{le="28.0"} 0.0
+txs_timeout_weight_bucket{le="29.0"} 0.0
+txs_timeout_weight_bucket{le="30.0"} 0.0
 txs_timeout_weight_bucket{le="+Inf"} 0.0
 txs_timeout_weight_count 0.0
 txs_timeout_weight_sum 0.0
