@@ -378,7 +378,7 @@ class StratumProtocol(JSONRPCProtocol):
                     miner_type=self.miner_type,
                     hashrate=self.hashrate_ghs,
                     weight=job.get_weight(),
-                    hash=obj.hash_hex
+                    hash=obj.hash_hex,
                 )
                 self.blocks_found += 1
             else:
@@ -388,7 +388,7 @@ class StratumProtocol(JSONRPCProtocol):
                     miner_type=self.miner_type,
                     hashrate=self.hashrate_ghs,
                     weight=job.get_weight(),
-                    hash=obj.hash_hex
+                    hash=obj.hash_hex,
                 )
                 self.txs_solved += 1
 
