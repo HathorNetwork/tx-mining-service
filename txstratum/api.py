@@ -91,11 +91,15 @@ class App:
 
         self.fix_invalid_timestamp: bool = fix_invalid_timestamp
 
-    async def on_prepare(self, request: web.Request, response: web.Response) -> None:
+    async def on_prepare(
+        self, request: web.Request, response: web.StreamResponse
+    ) -> None:
         """Set CORS headers for all responses on_prepare."""
         response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
         response.headers["Access-Control-Allow-Methods"] = request.method
-        response.headers["Access-Control-Allow-Headers"] = "x-prototype-version,x-requested-with,content-type"
+        response.headers[
+            "Access-Control-Allow-Headers"
+        ] = "x-prototype-version,x-requested-with,content-type"
         response.headers["Access-Control-Max-Age"] = "604800"
 
     async def health(self, request: web.Request) -> web.Response:
@@ -197,7 +201,6 @@ class App:
         except NewJobRefused:
             self.log.debug("new-job-refused", data=data)
             return web.json_response({"error": "new-job-refused"}, status=503)
-
         return web.json_response(job.to_dict())
 
     def _get_job(self, uuid_hex: Optional[str]) -> TxJob:
