@@ -95,6 +95,8 @@ class App:
         self, request: web.Request, response: web.StreamResponse
     ) -> None:
         """Set CORS headers for all responses on_prepare."""
+        # We allow localhost:3000 because it's the host used by the desktop wallet
+        # so devs can test running their own tx mining service with it
         response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
         response.headers["Access-Control-Allow-Methods"] = request.method
         response.headers[
