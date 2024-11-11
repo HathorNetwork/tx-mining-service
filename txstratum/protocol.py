@@ -72,6 +72,7 @@ class StratumProtocol(JSONRPCProtocol):
     RTT_ESTIMATOR_INTERVAL = (
         5  # in seconds, to estimate the RTT from application to miner
     )
+    RTT_CONFIDENCE_CONSTANT = 0.7
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
     MAX_WEIGHT = 60.0  # maximum "difficulty" to assign to jobs
@@ -104,6 +105,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         self.rtt: float = 0.0
         self.rtt_estimator_task: Optional[Periodic] = None
+        self.rtt_message_in_transit: bool = False
 
         self._submitted_work: List[SubmittedWork] = []
 
@@ -167,8 +169,9 @@ class StratumProtocol(JSONRPCProtocol):
             self.miner_version = result
             now = txstratum.time.time()
             current_rtt = now - message.created_at
-            alpha = 0.7
+            alpha = self.RTT_CONFIDENCE_CONSTANT
             self.rtt = (1 - alpha) * self.rtt + alpha * current_rtt
+            self.rtt_message_in_transit = False
         else:
             self.log.error(
                 "Cant handle result: {}".format(result),
@@ -188,7 +191,10 @@ class StratumProtocol(JSONRPCProtocol):
         now = txstratum.time.time()
 
         self.messages_in_transit[msgid] = MessageInTransit(
-            id=msgid, method=method, timeout=now + self.MESSAGE_TIMEOUT, created_at=now
+            id=msgid,
+            method=method,
+            timeout=now + self.MESSAGE_TIMEOUT,
+            created_at=now
         )
         self.send_request(method, params, msgid)
 
@@ -258,6 +264,9 @@ class StratumProtocol(JSONRPCProtocol):
 
     async def rtt_estimator(self) -> None:
         """Period task to request the miner version to calculate the rtt."""
+        if self.rtt_message_in_transit:
+            return
+        self.rtt_message_in_transit = True
         self.send_and_track_request("client.get_version", None)
 
     async def messages_timeout_job(self) -> None:
