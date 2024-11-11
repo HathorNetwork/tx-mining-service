@@ -42,7 +42,7 @@ METRICS_PUBSUB = {
     "txs_solved": Counter(
         "txs_solved",
         "Number of solved transactions",
-        labelnames=["miner_type", "miner_address"],
+        labelnames=["miner_type", "miner_address", "miner_id"],
     ),
     "txs_solved_weight": Histogram(
         "txs_solved_weight",
@@ -69,12 +69,12 @@ METRICS_PUBSUB = {
     "miner_completed_jobs": Counter(
         "miner_completed_jobs",
         "Number of completed jobs by miner",
-        labelnames=["miner_type", "miner_address"],
+        labelnames=["miner_type", "miner_address", "miner_id"],
     ),
     "miner_up": Gauge(
         "miner_up",
         "Indicates that a miner is up",
-        labelnames=["miner_address"],
+        labelnames=["miner_address", "miner_id"],
     ),
 }
 
@@ -145,7 +145,7 @@ class BasePrometheusExporter:
             RTT_METRIC_NAME,
             "Miner RTT",
             registry=self.registry,
-            labelnames=["miner_address"],
+            labelnames=["miner_address", "miner_id"],
         )
 
         for _, metric in METRICS_PUBSUB.items():
@@ -179,7 +179,8 @@ class BasePrometheusExporter:
         # Update each metrics for each miner
         for miner in self.manager.miners.values():
             self.metric_gauges[RTT_METRIC_NAME].labels(
-                miner_address=miner.miner_address_str
+                miner_address=miner.miner_address_str,
+                miner_id=miner.miner_id,
             ).set(miner.rtt)
 
     def start(self) -> None:
@@ -197,7 +198,8 @@ class BasePrometheusExporter:
         protocol = cast(StratumProtocol, obj["protocol"])
 
         METRICS_PUBSUB["txs_solved"].labels(
-            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str
+            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str,
+            miner_id=protocol.miner_id
         ).inc()
 
         METRICS_PUBSUB["txs_solved_weight"].labels(
@@ -220,29 +222,30 @@ class BasePrometheusExporter:
 
     async def _handle_protocol_job_completed(self, protocol: StratumProtocol) -> None:
         METRICS_PUBSUB["miner_completed_jobs"].labels(
-            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str
+            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str,
+            miner_id=protocol.miner_id
         ).inc()
 
     async def _handle_protocol_miner_subscribed(
         self, protocol: StratumProtocol
     ) -> None:
-        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
-            1
-        )
+        METRICS_PUBSUB["miner_up"].labels(
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
+        ).set(1)
         # Store default value (0) for miner rtt
         self.metric_gauges[RTT_METRIC_NAME].labels(
-            miner_address=protocol.miner_address_str
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
         ).set(0)
 
     async def _handle_protocol_miner_disconnected(
         self, protocol: StratumProtocol
     ) -> None:
-        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
-            0
-        )
+        METRICS_PUBSUB["miner_up"].labels(
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
+        ).set(0)
         # Reset rtt value
         self.metric_gauges[RTT_METRIC_NAME].labels(
-            miner_address=protocol.miner_address_str
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
         ).set(0)
 
 
