@@ -75,12 +75,16 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
 
     async def test_update_metrics(self):
         protocol = StratumProtocol(self.manager)
+        # Force miner_id instead of using the random one to validate in the prometheus fixture
+        protocol.miner_id = "id1"
         protocol.miner_address_str = "abc123"
         protocol.miner_version = "cpuminer/1.0"
         self.manager.miners["miner1"] = protocol
         self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol)
 
         protocol2 = StratumProtocol(self.manager)
+        # Force miner_id instead of using the random one to validate in the prometheus fixture
+        protocol2.miner_id = "id2"
         protocol2.miner_address_str = "def456"
         protocol2.miner_version = "cpuminer/2.0"
         self.manager.miners["miner2"] = protocol2
