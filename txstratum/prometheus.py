@@ -198,8 +198,9 @@ class BasePrometheusExporter:
         protocol = cast(StratumProtocol, obj["protocol"])
 
         METRICS_PUBSUB["txs_solved"].labels(
-            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str,
-            miner_id=protocol.miner_id
+            miner_type=protocol.miner_type,
+            miner_address=protocol.miner_address_str,
+            miner_id=protocol.miner_id,
         ).inc()
 
         METRICS_PUBSUB["txs_solved_weight"].labels(
@@ -222,8 +223,9 @@ class BasePrometheusExporter:
 
     async def _handle_protocol_job_completed(self, protocol: StratumProtocol) -> None:
         METRICS_PUBSUB["miner_completed_jobs"].labels(
-            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str,
-            miner_id=protocol.miner_id
+            miner_type=protocol.miner_type,
+            miner_address=protocol.miner_address_str,
+            miner_id=protocol.miner_id,
         ).inc()
 
     async def _handle_protocol_miner_subscribed(

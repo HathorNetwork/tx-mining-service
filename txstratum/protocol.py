@@ -191,10 +191,7 @@ class StratumProtocol(JSONRPCProtocol):
         now = txstratum.time.time()
 
         self.messages_in_transit[msgid] = MessageInTransit(
-            id=msgid,
-            method=method,
-            timeout=now + self.MESSAGE_TIMEOUT,
-            created_at=now
+            id=msgid, method=method, timeout=now + self.MESSAGE_TIMEOUT, created_at=now
         )
         self.send_request(method, params, msgid)
 
