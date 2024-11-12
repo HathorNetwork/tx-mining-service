@@ -72,6 +72,9 @@ class StratumProtocol(JSONRPCProtocol):
     RTT_ESTIMATOR_INTERVAL = (
         5  # in seconds, to estimate the RTT from application to miner
     )
+    RTT_ESTIMATOR_MESSAGE_TIMEOUT = (
+        60  # in seconds, the maximum time to wait for an rtt message to be received
+    )
     RTT_CONFIDENCE_CONSTANT = 0.7
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
@@ -105,7 +108,8 @@ class StratumProtocol(JSONRPCProtocol):
 
         self.rtt: float = 0.0
         self.rtt_estimator_task: Optional[Periodic] = None
-        self.rtt_message_in_transit: bool = False
+        # Timestamp that the rtt message estimator was sent
+        self.rtt_time_message_sent: Optional[int] = None
 
         self._submitted_work: List[SubmittedWork] = []
 
@@ -171,7 +175,7 @@ class StratumProtocol(JSONRPCProtocol):
             current_rtt = now - message.created_at
             alpha = self.RTT_CONFIDENCE_CONSTANT
             self.rtt = (1 - alpha) * self.rtt + alpha * current_rtt
-            self.rtt_message_in_transit = False
+            self.rtt_time_message_sent = None
         else:
             self.log.error(
                 "Cant handle result: {}".format(result),
@@ -261,9 +265,14 @@ class StratumProtocol(JSONRPCProtocol):
 
     async def rtt_estimator(self) -> None:
         """Period task to request the miner version to calculate the rtt."""
-        if self.rtt_message_in_transit:
+        now = txstratum.time.time()
+        # If we are still waiting for a reply to the latest rtt message and the timeout wasn't reached, then we return
+        if (
+            self.rtt_time_message_sent is not None
+            and now < self.rtt_time_message_sent + self.RTT_ESTIMATOR_MESSAGE_TIMEOUT
+        ):
             return
-        self.rtt_message_in_transit = True
+        self.rtt_time_message_sent = now
         self.send_and_track_request("client.get_version", None)
 
     async def messages_timeout_job(self) -> None:
