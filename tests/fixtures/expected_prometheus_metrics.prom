@@ -19,6 +19,10 @@ tx_queue 2.0
 # HELP block_template_error Number of errors updating block template
 # TYPE block_template_error gauge
 block_template_error 1.0
+# HELP miner_rtt Miner RTT
+# TYPE miner_rtt gauge
+miner_rtt{miner_address="abc123",miner_id="id1"} 0.0
+miner_rtt{miner_address="def456",miner_id="id2"} 0.0
 # HELP txs_jobs_received_total Number of transactions received by the API
 # TYPE txs_jobs_received_total counter
 txs_jobs_received_total 0.0
@@ -27,10 +31,10 @@ txs_jobs_received_total 0.0
 txs_jobs_received_created 1.642511672616624e+09
 # HELP txs_solved_total Number of solved transactions
 # TYPE txs_solved_total counter
-txs_solved_total{miner_address="abc123",miner_type="cpuminer"} 1.0
+txs_solved_total{miner_address="abc123",miner_id="id1",miner_type="cpuminer"} 1.0
 # HELP txs_solved_created Number of solved transactions
 # TYPE txs_solved_created gauge
-txs_solved_created{miner_address="abc123",miner_type="cpuminer"} 1.6425116730388892e+09
+txs_solved_created{miner_address="abc123",miner_id="id2",miner_type="cpuminer"} 1.6425116730388892e+09
 # HELP txs_solved_weight Txs solved histogram by tx weight
 # TYPE txs_solved_weight histogram
 txs_solved_weight_bucket{le="17.0",miner_type="cpuminer"} 0.0
