@@ -75,7 +75,7 @@ class StratumProtocol(JSONRPCProtocol):
     RTT_ESTIMATOR_MESSAGE_TIMEOUT = (
         60  # in seconds, the maximum time to wait for an rtt message to be received
     )
-    RTT_CONFIDENCE_CONSTANT = 0.7
+    RTT_ALPHA_SLIDING_WINDOW = 0.7
 
     MIN_WEIGHT = 20.0  # minimum "difficulty" to assign to jobs
     MAX_WEIGHT = 60.0  # maximum "difficulty" to assign to jobs
@@ -109,7 +109,7 @@ class StratumProtocol(JSONRPCProtocol):
         self.rtt: float = 0.0
         self.rtt_estimator_task: Optional[Periodic] = None
         # Timestamp that the rtt message estimator was sent
-        self.rtt_time_message_sent: Optional[int] = None
+        self.rtt_time_message_sent: Optional[float] = None
 
         self._submitted_work: List[SubmittedWork] = []
 
@@ -173,7 +173,7 @@ class StratumProtocol(JSONRPCProtocol):
             self.miner_version = result
             now = txstratum.time.time()
             current_rtt = now - message.created_at
-            alpha = self.RTT_CONFIDENCE_CONSTANT
+            alpha = self.RTT_ALPHA_SLIDING_WINDOW
             self.rtt = (1 - alpha) * self.rtt + alpha * current_rtt
             self.rtt_time_message_sent = None
         else:
