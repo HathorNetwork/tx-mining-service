@@ -42,18 +42,18 @@ METRICS_PUBSUB = {
     "txs_solved": Counter(
         "txs_solved",
         "Number of solved transactions",
-        labelnames=["miner_type", "miner_address"],
+        labelnames=["miner_type", "miner_address", "miner_id"],
     ),
     "txs_solved_weight": Histogram(
         "txs_solved_weight",
         "Txs solved histogram by tx weight",
-        buckets=(17, 18, 19, 20, 21, 22, 23, 25, float("inf")),
+        buckets=(17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, float("inf")),
         labelnames=["miner_type"],
     ),
     "txs_timeout_weight": Histogram(
         "txs_timeout_weight",
         "Txs timeouts histogram by tx weight",
-        buckets=(17, 18, 19, 20, 21, 22, 23, 25, float("inf")),
+        buckets=(17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, float("inf")),
     ),
     "txs_mining_time": Histogram(
         "txs_mining_time",
@@ -69,14 +69,17 @@ METRICS_PUBSUB = {
     "miner_completed_jobs": Counter(
         "miner_completed_jobs",
         "Number of completed jobs by miner",
-        labelnames=["miner_type", "miner_address"],
+        labelnames=["miner_type", "miner_address", "miner_id"],
     ),
     "miner_up": Gauge(
         "miner_up",
         "Indicates that a miner is up",
-        labelnames=["miner_address"],
+        labelnames=["miner_address", "miner_id"],
     ),
 }
+
+
+RTT_METRIC_NAME = "miner_rtt"
 
 
 class MetricData(NamedTuple):
@@ -137,6 +140,14 @@ class BasePrometheusExporter:
         for name, comment in METRIC_INFO.items():
             self.metric_gauges[name] = Gauge(name, comment, registry=self.registry)
 
+        # RTT miner metric
+        self.metric_gauges[RTT_METRIC_NAME] = Gauge(
+            RTT_METRIC_NAME,
+            "Miner RTT",
+            registry=self.registry,
+            labelnames=["miner_address", "miner_id"],
+        )
+
         for _, metric in METRICS_PUBSUB.items():
             self.registry.register(metric)
 
@@ -165,6 +176,13 @@ class BasePrometheusExporter:
         for metric_name in METRIC_INFO.keys():
             self.metric_gauges[metric_name].set(getattr(data, metric_name))
 
+        # Update each metrics for each miner
+        for miner in self.manager.miners.values():
+            self.metric_gauges[RTT_METRIC_NAME].labels(
+                miner_address=miner.miner_address_str,
+                miner_id=miner.miner_id,
+            ).set(miner.rtt)
+
     def start(self) -> None:
         """Start exporter."""
         asyncio.ensure_future(self.update_metrics_task.start())
@@ -180,7 +198,9 @@ class BasePrometheusExporter:
         protocol = cast(StratumProtocol, obj["protocol"])
 
         METRICS_PUBSUB["txs_solved"].labels(
-            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str
+            miner_type=protocol.miner_type,
+            miner_address=protocol.miner_address_str,
+            miner_id=protocol.miner_id,
         ).inc()
 
         METRICS_PUBSUB["txs_solved_weight"].labels(
@@ -203,22 +223,32 @@ class BasePrometheusExporter:
 
     async def _handle_protocol_job_completed(self, protocol: StratumProtocol) -> None:
         METRICS_PUBSUB["miner_completed_jobs"].labels(
-            miner_type=protocol.miner_type, miner_address=protocol.miner_address_str
+            miner_type=protocol.miner_type,
+            miner_address=protocol.miner_address_str,
+            miner_id=protocol.miner_id,
         ).inc()
 
     async def _handle_protocol_miner_subscribed(
         self, protocol: StratumProtocol
     ) -> None:
-        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
-            1
-        )
+        METRICS_PUBSUB["miner_up"].labels(
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
+        ).set(1)
+        # Store default value (0) for miner rtt
+        self.metric_gauges[RTT_METRIC_NAME].labels(
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
+        ).set(0)
 
     async def _handle_protocol_miner_disconnected(
         self, protocol: StratumProtocol
     ) -> None:
-        METRICS_PUBSUB["miner_up"].labels(miner_address=protocol.miner_address_str).set(
-            0
-        )
+        METRICS_PUBSUB["miner_up"].labels(
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
+        ).set(0)
+        # Reset rtt value
+        self.metric_gauges[RTT_METRIC_NAME].labels(
+            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
+        ).set(0)
 
 
 class PrometheusExporter(BasePrometheusExporter):

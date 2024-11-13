@@ -86,7 +86,23 @@ class App:
         self.app.router.add_post("/submit-job", self.submit_job)
         self.app.router.add_post("/cancel-job", self.cancel_job)
 
+        # Signal handler to add CORS headers when preparing the response
+        self.app.on_response_prepare.append(self.on_prepare)
+
         self.fix_invalid_timestamp: bool = fix_invalid_timestamp
+
+    async def on_prepare(
+        self, request: web.Request, response: web.StreamResponse
+    ) -> None:
+        """Set CORS headers for all responses on_prepare."""
+        # We allow localhost:3000 because it's the host used by the desktop wallet
+        # so devs can test running their own tx mining service with it
+        response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+        response.headers["Access-Control-Allow-Methods"] = request.method
+        response.headers[
+            "Access-Control-Allow-Headers"
+        ] = "x-prototype-version,x-requested-with,content-type"
+        response.headers["Access-Control-Max-Age"] = "604800"
 
     async def health(self, request: web.Request) -> web.Response:
         """Return the health check status for the tx-mining-service."""
