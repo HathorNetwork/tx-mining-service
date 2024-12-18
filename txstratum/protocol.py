@@ -226,6 +226,8 @@ class StratumProtocol(JSONRPCProtocol):
             asyncio.ensure_future(self.refresh_job_task.stop())
         if self.messages_timeout_task:
             asyncio.ensure_future(self.messages_timeout_task.stop())
+        if self.rtt_estimator_task:
+            asyncio.ensure_future(self.rtt_estimator_task.stop())
 
     def ask_miner_to_reconnect(self) -> None:
         """Ask the miner to reconnect. We just want to force it to disconnect with this."""
