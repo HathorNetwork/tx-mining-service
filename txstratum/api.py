@@ -83,7 +83,8 @@ class App:
         self.app.router.add_get("/health", self.health)
         self.app.router.add_get("/mining-status", self.mining_status)
         self.app.router.add_get("/job-status", self.job_status)
-        self.app.router.add_options("/submit-job", self.submit_job_options)
+        self.app.router.add_options("/submit-job", self.get_options_response)
+        self.app.router.add_options("/cancel-job", self.get_options_response)
         self.app.router.add_post("/submit-job", self.submit_job)
         self.app.router.add_post("/cancel-job", self.cancel_job)
 
@@ -121,7 +122,7 @@ class App:
         """Return status of miners."""
         return web.json_response(self.manager.status())
 
-    async def submit_job_options(self, request: web.Request) -> web.Response:
+    async def get_options_response(self, request: web.Request) -> web.Response:
         """
         Return empty success response.
 
