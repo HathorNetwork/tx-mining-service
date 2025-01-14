@@ -83,6 +83,8 @@ class App:
         self.app.router.add_get("/health", self.health)
         self.app.router.add_get("/mining-status", self.mining_status)
         self.app.router.add_get("/job-status", self.job_status)
+        self.app.router.add_options("/submit-job", self.get_options_response)
+        self.app.router.add_options("/cancel-job", self.get_options_response)
         self.app.router.add_post("/submit-job", self.submit_job)
         self.app.router.add_post("/cancel-job", self.cancel_job)
 
@@ -119,6 +121,14 @@ class App:
     async def mining_status(self, request: web.Request) -> web.Response:
         """Return status of miners."""
         return web.json_response(self.manager.status())
+
+    async def get_options_response(self, request: web.Request) -> web.Response:
+        """
+        Return empty success response.
+
+        This endpoint is required to make CORS work when using the desktop wallet with a local tx-mining-service.
+        """
+        return web.json_response("{}", status=200)
 
     async def submit_job(self, request: web.Request) -> web.Response:
         """Submit a new tx job to the manager.
