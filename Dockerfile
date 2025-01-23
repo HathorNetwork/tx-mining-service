@@ -1,4 +1,4 @@
-FROM python:3.9-alpine as build
+FROM python:3.9-alpine AS build
 
 WORKDIR /code
 
