@@ -5,7 +5,8 @@
 
 [tool.poetry]
 name = "tx-mining-service"
-version = "0.14.0"
+version = "0.14.1"
+package-mode = false
 description = "Service to mine transactions"
 authors = ["Hathor Team <contact@hathor.network>"]
 license = "MIT"
