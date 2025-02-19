@@ -12,18 +12,9 @@ from typing import List, Optional
 
 import structlog
 from aiohttp import web
-from hathorlib.client import HathorClient
 from structlog import get_logger
 
-from txstratum.api import App
-from txstratum.filters import FileFilter, TOIFilter, TXFilter
-from txstratum.healthcheck.healthcheck import HealthCheck
-from txstratum.manager import TxMiningManager
-from txstratum.pubsub import PubSubManager
-from txstratum.toi_client import TOIAsyncClient
-
 logger = get_logger()
-
 
 DEFAULT_LOGGING_CONFIG_FILE = "log.conf"
 
@@ -149,27 +140,31 @@ def create_parser() -> ArgumentParser:
 class RunService:
     """This is the main class of the service. It starts everything up."""
 
-    manager: TxMiningManager
-    loop: AbstractEventLoop
-    tx_filters: List[TXFilter]
-    health_check: HealthCheck
-
     def __init__(self, args: Namespace) -> None:
         """Initialize the service."""
+        from hathorlib.client import HathorClient
+        from hathorlib.conf import HathorSettings
+
+        from txstratum.healthcheck.healthcheck import HealthCheck
+        from txstratum.manager import TxMiningManager
+        from txstratum.pubsub import PubSubManager
+
+        self.settings = HathorSettings()
+
         self.args = args
 
         self.configure_logging(args)
 
-        self.loop = asyncio.get_event_loop()
+        self.loop: AbstractEventLoop = asyncio.get_event_loop()
 
-        self.pubsub = PubSubManager(self.loop)
-        self.backend = HathorClient(args.backend)
-        self.manager = TxMiningManager(
+        self.pubsub: PubSubManager = PubSubManager(self.loop)
+        self.backend: HathorClient = HathorClient(args.backend)
+        self.manager: TxMiningManager = TxMiningManager(
             backend=self.backend,
             pubsub=self.pubsub,
             address=args.address,
         )
-        self.health_check = HealthCheck(self.manager, self.backend)
+        self.health_check: HealthCheck = HealthCheck(self.manager, self.backend)
 
     def configure_logging(self, args: Namespace) -> None:
         """Configure logging."""
@@ -209,6 +204,10 @@ class RunService:
 
     def execute(self) -> None:
         """Run the service according to the args."""
+        from txstratum.api import App
+        from txstratum.filters import FileFilter, TOIFilter, TXFilter
+        from txstratum.toi_client import TOIAsyncClient
+
         if self.args.block_template_update_interval:
             self.manager.block_template_update_interval = (
                 self.args.block_template_update_interval
@@ -279,6 +278,7 @@ class RunService:
             min_wallet_desktop_version=self.args.min_wallet_desktop_version,
             min_wallet_mobile_version=self.args.min_wallet_mobile_version,
             min_wallet_headless_version=self.args.min_wallet_headless_version,
+            network=self.settings.NETWORK_NAME,
         )
 
         web_runner = web.AppRunner(api_app.app, logger=logger)
