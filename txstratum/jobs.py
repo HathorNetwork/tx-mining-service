@@ -115,9 +115,9 @@ class TxJob:
         self.status = JobStatus.FAILED
         self.message = message
 
-    def get_header_without_nonce(self) -> bytes:
+    def get_mining_header_without_nonce(self) -> bytes:
         """Return job's header without nonce."""
-        return self._tx.get_header_without_nonce()
+        return self._tx.get_mining_header_without_nonce()
 
     def get_nonce_size(self) -> int:
         """Return job's nonce size."""
@@ -191,7 +191,7 @@ class MinerJob(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_header_without_nonce(self) -> bytes:
+    def get_mining_header_without_nonce(self) -> bytes:
         """Return job's header without nonce."""
         raise NotImplementedError
 
@@ -245,9 +245,9 @@ class MinerTxJob(MinerJob):
         """Update job timestamp."""
         self._tx.timestamp = int(txstratum.time.time())
 
-    def get_header_without_nonce(self) -> bytes:
+    def get_mining_header_without_nonce(self) -> bytes:
         """Return job's header without nonce."""
-        return self._tx.get_header_without_nonce()
+        return self._tx.get_mining_header_without_nonce()
 
     def get_nonce_size(self) -> int:
         """Return job's nonce size."""
@@ -298,9 +298,9 @@ class MinerBlockJob(MinerJob):
                 return
         self._block.timestamp = now
 
-    def get_header_without_nonce(self) -> bytes:
+    def get_mining_header_without_nonce(self) -> bytes:
         """Return job's header without nonce."""
-        return self._block.get_header_without_nonce()
+        return self._block.get_mining_header_without_nonce()
 
     def get_nonce_size(self) -> int:
         """Return job's nonce size."""
