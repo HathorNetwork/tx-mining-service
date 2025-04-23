@@ -762,7 +762,7 @@ class ManagerTestCase(unittest.TestCase):
             job_data = args[1]
             self.assertEqual(job_data["clean"], False)
             self.assertEqual(
-                job_data["data"], current_job.get_header_without_nonce().hex()
+                job_data["data"], current_job.get_mining_header_without_nonce().hex()
             )
 
         conn.send_request.reset_mock()
@@ -799,7 +799,7 @@ class ManagerTestCase(unittest.TestCase):
 
         self.assertEqual(job_data["clean"], True)
         self.assertEqual(
-            job_data["data"], conn.current_job.get_header_without_nonce().hex()
+            job_data["data"], conn.current_job.get_mining_header_without_nonce().hex()
         )
 
     def test_miner_block_submission_after_receiving_tx(self):

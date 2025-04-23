@@ -584,7 +584,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         # Send new job to the miner.
         job_data = {
-            "data": job.get_header_without_nonce().hex(),
+            "data": job.get_mining_header_without_nonce().hex(),
             "job_id": job.uuid.hex(),
             "nonce_size": job.get_nonce_size(),
             "weight": float(job.share_weight),
