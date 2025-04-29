@@ -60,7 +60,9 @@ class TxJob:
         """
         self._tx: BaseTransaction = tx_or_block_from_bytes(data)
 
-        self.uuid: bytes = hashlib.sha256(self._tx.get_mining_header_without_nonce()).digest()
+        self.uuid: bytes = hashlib.sha256(
+            self._tx.get_mining_header_without_nonce()
+        ).digest()
         self.add_parents: bool = add_parents
         self.propagate: bool = propagate
         self.timeout: Optional[float] = timeout
