@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import enum
+import hashlib
 import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
@@ -59,7 +60,7 @@ class TxJob:
         """
         self._tx: BaseTransaction = tx_or_block_from_bytes(data)
 
-        self.uuid: bytes = self._tx.get_funds_hash()
+        self.uuid: bytes = hashlib.sha256(self._tx.get_mining_header_without_nonce()).digest()
         self.add_parents: bool = add_parents
         self.propagate: bool = propagate
         self.timeout: Optional[float] = timeout
