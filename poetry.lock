@@ -594,14 +594,14 @@ files = [
 
 [[package]]
 name = "hathorlib"
-version = "0.11.0"
+version = "0.12.0"
 description = "Hathor Network base objects library"
 optional = false
 python-versions = "<4,>=3.9"
 groups = ["main"]
 files = [
-    {file = "hathorlib-0.11.0-py3-none-any.whl", hash = "sha256:2ff1c62bf34daadb562b91079eed36c00d25da68e2350c95f3aedd4fe990a17c"},
-    {file = "hathorlib-0.11.0.tar.gz", hash = "sha256:b276b52bb651d2c2e575bb2cbff9195dbfde26ef7b8e2bc4944f69900bc31b6a"},
+    {file = "hathorlib-0.12.0-py3-none-any.whl", hash = "sha256:f9868399519eac5efdec2c93e2fa122fcc1cf6b74fcd1efac918573d690caaa5"},
+    {file = "hathorlib-0.12.0.tar.gz", hash = "sha256:09828665d081c57218b74427bf85c559e79b29c93c998fce4a49a3fd83d6c7a3"},
 ]
 
 [package.dependencies]
@@ -1217,4 +1217,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "32b9b9c2e5ce75b3bc368d4e5c6e27c7a1cd4dbec9dca5c5d3857fbe5b8e2f52"
+content-hash = "a01dd0706e7b162c285ead27999cd9ea2a56dc44320b23464604bdadb8d6dac9"
