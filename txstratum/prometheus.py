@@ -97,7 +97,7 @@ class MetricData(NamedTuple):
 def collect_metrics(manager: "TxMiningManager") -> MetricData:
     """Collect data from TxMiningManager."""
     return MetricData(
-        miners_count=len(manager.miners),
+        miners_count=manager.get_miners_count(),
         total_hashrate_ghs=manager.get_total_hashrate_ghs(),
         txs_timeout=manager.txs_timeout,
         blocks_found=manager.blocks_found,
