@@ -60,7 +60,9 @@ class TxMiningManager:
         self.tx_jobs: Dict[bytes, TxJob] = {}
         self.tx_queue: Deque[TxJob] = deque()
         self.connections: Dict[str, StratumProtocol] = {}
-        self.miners: Dict[str, StratumProtocol] = {}
+        # The first key aggregator is the miner type (cpuminer, cgminer, ccminer/unknown)
+        # The second one is the miner id
+        self.miners: Dict[str, Dict[str, StratumProtocol]] = {}
         self.latest_submitted_block_height: int = -1
         self.block_template_updated_at: float = 0
         self.block_template: Optional["BlockTemplate"] = None
@@ -116,56 +118,88 @@ class TxMiningManager:
     def remove_connection(self, protocol: StratumProtocol) -> None:
         """Remove a connection from the list of connections."""
         self.connections.pop(protocol.miner_id)
-        self.miners.pop(protocol.miner_id, None)
+        if protocol.miner_type in self.miners:
+            self.miners[protocol.miner_type].pop(protocol.miner_id, None)
 
     def has_any_miner(self) -> bool:
         """Return True if there is at least one miner connected."""
-        return len(self.miners) > 0
+        return self.get_miners_count() > 0
+
+    def get_miners_count(self) -> bool:
+        """Return the quantity of miners."""
+        count = 0
+        for miner_dicts in self.miners.values():
+            count += len(miner_dicts)
+
+        return count
 
     def has_any_submitted_job_in_period(self, period: int) -> bool:
         """Return True if there is at least one miner that submitted a job in the last `period` seconds."""
         now = txstratum.time.time()
 
-        for miner in self.miners.values():
-            if miner.last_submit_at > 0 and now - miner.last_submit_at < period:
-                return True
+        for miner_dicts in self.miners.values():
+            for miner in miner_dicts.values():
+                if miner.last_submit_at > 0 and now - miner.last_submit_at < period:
+                    return True
         return False
 
     def shutdown(self) -> None:
         """Tasks to be executed before the service is shut down."""
         self.refuse_new_jobs = True
 
-        for protocol in self.miners.values():
-            protocol.refuse_new_miners = True
-            protocol.ask_miner_to_reconnect()
+        for miner_dicts in self.miners.values():
+            for protocol in miner_dicts.values():
+                protocol.refuse_new_miners = True
+                protocol.ask_miner_to_reconnect()
 
     def mark_connection_as_ready(self, protocol: StratumProtocol) -> None:
         """Mark a miner as ready to mine. It is called by StratumProtocol."""
-        self.miners[protocol.miner_id] = protocol
-        self.update_miner_job(protocol)
+        if protocol.miner_type not in self.miners:
+            self.miners[protocol.miner_type] = {}
+        self.miners[protocol.miner_type][protocol.miner_id] = protocol
+        self.update_miners_job()
 
-    def update_miner_job(
-        self, protocol: StratumProtocol, *, clean: bool = False
-    ) -> None:
+    def update_miners_job(self) -> None:
         """Send a new job for a miner."""
-        job = self.get_best_job(protocol)
+        job = self.get_best_job()
         if job is None:
             # We do not have a job for the miner. We could close the connection,
             # but we do not do it because a TxJob might arrive anytime.
             return
 
         if isinstance(job, MinerTxJob):
-            is_same_job = (
-                isinstance(protocol.current_job, MinerTxJob)
-                and job.tx_job == protocol.current_job.tx_job
-            )
+            # The best available job is a tx job, so we must
+            # check if we have enough miners available to mine
+            have_available_miners = False
+            for miner_dicts in self.miners.values():
+                for protocol in miner_dicts.values():
+                    if protocol.stop_mining_job or isinstance(protocol.current_job, MinerBlockJob) or protocol.current_job is None:
+                        # Available miners to mine a tx job are the ones mining block jobs or the ones
+                        # marked to stop mining job
+                        protocol.update_job(job, clean=protocol.stop_mining_job)
+                        # We must set to False the flag to stop mining job
+                        # because the job has just been updated
+                        protocol.stop_mining_job = False
+                        have_available_miners = True
+                        self.tx_queue.remove(job.tx_job)
+                        # TODO for now we will use one miner for each job but
+                        # we should add here the logic to get as many as the redundancy
+                        # is configured and the best type(s) depending on the job weight
+                        break
+                if have_available_miners:
+                    break
 
-            if not is_same_job:
-                # This will tell the miner to abandon its current job and start this immediately.
-                # We do not need to force this if the job is the same.
-                clean = True
-
-        protocol.update_job(job, clean=clean)
+        if isinstance(job, MinerBlockJob) or not have_available_miners:
+            # If the best job is a block job, then we just update the job
+            # for all protocol that were mining a block job or that
+            # were marked to stop mining their current job
+            for miner_dicts in self.miners.values():
+                for protocol in miner_dicts.values():
+                    if protocol.stop_mining_job or isinstance(protocol.current_job, MinerBlockJob) or protocol.current_job is None:
+                        protocol.update_job(job, clean=protocol.stop_mining_job)
+                        # We must set to False the flag to stop mining job
+                        # because the job has just been updated
+                        protocol.stop_mining_job = False
 
     async def _push_block_job(self, job: MinerBlockJob) -> None:
         """Pushes a block to the fullnode.
@@ -235,15 +269,6 @@ class TxMiningManager:
                 job_id=tx_job.uuid.hex(),
             )
             return
-
-        try:
-            # Remove from queue.
-            self.tx_queue.remove(tx_job)
-        except ValueError:
-            self.log.warning(
-                "Tried removing a job that was not in the queue.",
-                job_id=tx_job.uuid.hex(),
-            )
 
         # Schedule to clean it up.
         self.schedule_job_clean_up(tx_job)
@@ -319,17 +344,23 @@ class TxMiningManager:
 
     def update_miners_block_template(self) -> None:
         """Create and send a new job for each miner."""
-        for miner, protocol in self.miners.items():
-            if isinstance(protocol.current_job, MinerBlockJob):
-                self.update_miner_job(protocol)
+        for miner_dicts in self.miners.values():
+            for miner, protocol in miner_dicts.items():
+                if isinstance(protocol.current_job, MinerBlockJob):
+                    self.update_miners_job()
 
     def get_total_hashrate_ghs(self) -> float:
         """Return total hashrate (Gh/s)."""
-        return sum(p.hashrate_ghs or 0 for p in self.miners.values())
+        total = 0
+        for miner_dicts in self.miners.values():
+            total += sum(p.hashrate_ghs or 0 for p in miner_dicts.values())
+        return total
 
     def status(self) -> Dict[Any, Any]:
         """Return status dict with useful metrics for use in Status API."""
-        miners = [p.status() for p in self.miners.values()]
+        miners = []
+        for miner_dicts in self.miners.values():
+            miners += [p.status() for p in miner_dicts.values()]
         total_hashrate_ghs = self.get_total_hashrate_ghs()
         return {
             "miners": miners,
@@ -366,7 +397,8 @@ class TxMiningManager:
                 raise JobAlreadyExists
         self.tx_jobs[job.uuid] = job
 
-        miners_hashrate_ghs = sum(x.hashrate_ghs for x in self.miners.values())
+        # XXX This should be better calculated now that we won't be using all miners to mine all jobs
+        miners_hashrate_ghs = self.get_total_hashrate_ghs()
         job.expected_mining_time = calculate_expected_mining_time(
             miners_hashrate_ghs, job.get_weight()
         )
@@ -400,7 +432,6 @@ class TxMiningManager:
             raise ValueError("Job has already finished")
         job.status = JobStatus.CANCELLED
         self.tx_jobs.pop(job.uuid)
-        self.tx_queue.remove(job)
         self.stop_mining_tx(job)
         self.log.info("TxJob cancelled", job=job.to_dict())
 
@@ -412,12 +443,6 @@ class TxMiningManager:
         self.txs_timeout += 1
         self.pubsub.emit(TxMiningEvents.MANAGER_TX_TIMEOUT, job)
         job.status = JobStatus.TIMEOUT
-        try:
-            self.tx_queue.remove(job)
-        except ValueError:
-            self.log.error(
-                "TxJob timeout but not in queue. This shouldnt happen", job=job
-            )
         self.stop_mining_tx(job)
         # Schedule to clean it up.
         self.schedule_job_clean_up(job)
@@ -436,20 +461,24 @@ class TxMiningManager:
         if job.timeout:
             self.schedule_job_timeout(job)
 
-        if len(self.tx_queue) > 1:
-            # If the queue is not empty, do nothing.
-            return
-
-        for _, protocol in self.miners.items():
-            self.update_miner_job(protocol)
+        self.update_miners_job()
 
     def stop_mining_tx(self, job: TxJob) -> None:
         """Stop mining a tx job."""
-        for protocol in self.miners.values():
-            if protocol.current_job is not None and not protocol.current_job.is_block:
-                assert isinstance(protocol.current_job, MinerTxJob)
-                if protocol.current_job.tx_job == job:
-                    self.update_miner_job(protocol, clean=True)
+        should_update_miners_job = False
+
+        for miner_dicts in self.miners.values():
+            for protocol in miner_dicts.values():
+                if protocol.current_job is not None and not protocol.current_job.is_block:
+                    assert isinstance(protocol.current_job, MinerTxJob)
+                    if protocol.current_job.tx_job == job:
+                        protocol.stop_mining_job = True
+                        should_update_miners_job = True
+
+        if should_update_miners_job:
+            # We have at least one miner that was mining the tx
+            # we want to stop to mine, so we must update the miners job
+            self.update_miners_job()
 
     def _job_clean_up(self, job: TxJob) -> None:
         """Clean up tx job. It is scheduled after a tx is solved."""
@@ -459,9 +488,10 @@ class TxMiningManager:
         if job._cleanup_timer:
             job._cleanup_timer.cancel()
 
-    def get_best_job(self, protocol: StratumProtocol) -> Optional[MinerJob]:
+    def get_best_job(self) -> Optional[MinerJob]:
         """Return best job for a miner."""
         if len(self.tx_queue) > 0:
+            # TODO maybe it won't start mining this job now
             job = self.tx_queue[0]
             assert job.status not in JobStatus.get_after_mining_states()
             if job.status != JobStatus.MINING:
