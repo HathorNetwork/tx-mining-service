@@ -82,14 +82,12 @@ class BlockMiner:
         self.log.info("Block miner stopped", blocks_found=self.blocks_found)
 
     async def _wait_for_fullnode(self) -> None:
-        """Wait until the fullnode is ready."""
+        """Wait until the fullnode is ready to serve block templates."""
         while self._running:
             try:
-                health = await self.backend.health()
-                if health.get("status") == "pass":
-                    self.log.info("Fullnode is ready")
-                    return
-                self.log.info("Fullnode not ready yet", status=health.get("status"))
+                await self.backend.get_block_template(address=self.address)
+                self.log.info("Fullnode is ready")
+                return
             except Exception:
                 self.log.info("Waiting for fullnode to become available...")
             await asyncio.sleep(1)
