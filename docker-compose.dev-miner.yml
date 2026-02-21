@@ -1,0 +1,48 @@
+# Example docker-compose for running tx-mining-service in dev-miner mode.
+#
+# This replaces both `tx-mining-service` + `cpuminer` with a single service.
+# The dev-miner mines blocks in-process (no external miner needed) and solves
+# transaction PoW synchronously.
+#
+# Usage:
+#   docker compose -f docker-compose.dev-miner.yml up
+#
+# To use this from another project's docker-compose, build the image first:
+#   docker build -t hathornetwork/dev-miner .
+# Then reference it in your compose file.
+
+services:
+  fullnode:
+    # Replace with your fullnode image/config
+    image: hathornetwork/hathor-core:stable
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1a/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "8080:8080"
+    networks:
+      - hathor-privnet
+
+  tx-mining-service:
+    platform: linux/amd64
+    build: .
+    depends_on:
+      fullnode:
+        condition: service_healthy
+    ports:
+      - "8035:8035"
+    command: [
+      "http://fullnode:8080",
+      "--dev-miner",
+      "--api-port=8035",
+      "--block-interval=1000",
+      "--testnet",
+      "--address", "WTjhJXzQJETVx7BVXdyZmvk396DRRsubdw",
+    ]
+    networks:
+      - hathor-privnet
+
+networks:
+  hathor-privnet:
