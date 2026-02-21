@@ -136,7 +136,9 @@ class DevMiningManager:
         tx = job.get_tx()
         tx.timestamp = int(txstratum.time.time())
 
-        if not solve_tx(tx):
+        loop = asyncio.get_event_loop()
+        solved = await loop.run_in_executor(None, solve_tx, tx)
+        if not solved:
             job.mark_as_failed("Failed to solve PoW")
             self.txs_failed += 1
             self._schedule_cleanup(job)

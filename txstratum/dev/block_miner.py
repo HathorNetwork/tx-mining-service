@@ -23,16 +23,16 @@ if TYPE_CHECKING:
 
 logger = get_logger()
 
+# Full 32-bit nonce space.
+MAX_NONCE = 2**32
+
 
 def solve_block(block: Block) -> bool:
     """Solve PoW for a block by iterating nonces.
 
-    With weight ~21 (minimum), roughly 1 in 2M nonces is valid. This is
-    solvable in milliseconds on modern hardware.
-
     Returns True if a valid nonce was found, False otherwise.
     """
-    for nonce in range(2**24):
+    for nonce in range(MAX_NONCE):
         block.nonce = nonce
         block.update_hash()
         if block.verify_pow():

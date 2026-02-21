@@ -13,7 +13,7 @@
 
 services:
   fullnode:
-    image: hathornetwork/hathor-core:test-mode-block-weight
+    image: hathor-core:test-mode-block-weight
     command: [
       "run_node",
       "--status", "8080",
