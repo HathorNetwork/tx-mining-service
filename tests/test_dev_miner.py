@@ -251,10 +251,9 @@ class TestSolveBlock(AioHTTPTestCase):
 class TestBlockMinerInterval(AioHTTPTestCase):
     """Test that BlockMiner produces blocks at a steady cadence.
 
-    The block-to-block time should approximate block_interval_ms regardless
-    of how long the PoW solving takes (as long as it finishes within the
-    interval). This catches the bug where the miner sleeps the full interval
-    ON TOP of the mining time, making actual intervals = mining_time + interval.
+    With --test-mode-block-weight on the fullnode, block PoW is trivial
+    (weight ~1, most nonces valid on the first try). These tests verify
+    that the miner produces blocks at the configured interval.
     """
 
     __test__ = True
@@ -264,23 +263,8 @@ class TestBlockMinerInterval(AioHTTPTestCase):
 
         return web.Application()
 
-    @unittest_run_loop
-    async def test_blocks_mined_at_regular_intervals(self):
-        """At least 5 blocks should be mined ~once per block_interval_ms.
-
-        We simulate solve_block taking 60-90% of the interval (120-180ms out
-        of 200ms). Without the timing fix, actual intervals become 320-380ms
-        instead of the expected ~200ms, clearly exceeding the 40% tolerance.
-        """
-        block_interval_ms = 200
-        num_blocks = 5
-        timestamps = []
-
-        # Deterministic mining delays: 60-90% of the block interval
-        mining_delays_s = [0.15, 0.18, 0.12, 0.16, 0.14, 0.17]
-        call_count = 0
-
-        # Mock backend
+    def _make_miner(self, block_interval_ms, timestamps):
+        """Create a BlockMiner with a mocked backend that records push timestamps."""
         backend = MagicMock()
         template = MagicMock()
         template.data = BLOCK_DATA
@@ -292,43 +276,29 @@ class TestBlockMinerInterval(AioHTTPTestCase):
 
         backend.push_tx_or_block = AsyncMock(side_effect=record_push)
 
-        def fake_solve_block(block):
-            """Simulate PoW solving that takes a non-trivial fraction of the interval."""
-            nonlocal call_count
-            delay = mining_delays_s[min(call_count, len(mining_delays_s) - 1)]
-            call_count += 1
-            _time.sleep(delay)
-            return True
+        miner = BlockMiner(backend=backend, block_interval_ms=block_interval_ms)
+        return miner
 
-        with patch(
-            "txstratum.dev.block_miner.solve_block", side_effect=fake_solve_block
-        ):
-            miner = BlockMiner(backend=backend, block_interval_ms=block_interval_ms)
-            await miner.start()
+    async def _wait_for_blocks(self, timestamps, num_blocks, timeout_s=5.0):
+        """Poll until enough block timestamps are recorded or timeout."""
+        deadline = _time.monotonic() + timeout_s
+        while len(timestamps) < num_blocks and _time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
 
-            # Wait for enough blocks (hard timeout prevents hanging)
-            timeout = _time.monotonic() + 5.0
-            while len(timestamps) < num_blocks and _time.monotonic() < timeout:
-                await asyncio.sleep(0.02)
-
-            await miner.stop()
-
+    def _assert_regular_intervals(self, timestamps, num_blocks, block_interval_ms,
+                                  tolerance_pct=0.40):
+        """Assert that block-to-block intervals are within tolerance."""
         self.assertGreaterEqual(
             len(timestamps),
             num_blocks,
             f"Expected at least {num_blocks} blocks but only got {len(timestamps)}",
         )
 
-        # Calculate block-to-block intervals
         intervals_ms = [
             (timestamps[i + 1] - timestamps[i]) * 1000
             for i in range(num_blocks - 1)
         ]
-
-        # 40% tolerance covers async scheduling jitter but NOT the bug:
-        #   Correct intervals:  ~200ms  → within 120-280ms ✓
-        #   Buggy intervals:    ~320ms+ → exceeds 280ms    ✗
-        tolerance_ms = block_interval_ms * 0.40
+        tolerance_ms = block_interval_ms * tolerance_pct
 
         for i, interval in enumerate(intervals_ms):
             self.assertAlmostEqual(
@@ -340,3 +310,56 @@ class TestBlockMinerInterval(AioHTTPTestCase):
                     f"(expected ~{block_interval_ms}ms +/-{tolerance_ms:.0f}ms)"
                 ),
             )
+
+    @unittest_run_loop
+    async def test_blocks_mined_at_regular_intervals_trivial_weight(self):
+        """With trivial block weight (test-mode), solve_block returns almost
+        instantly and blocks should be mined exactly once per interval.
+        """
+        block_interval_ms = 200
+        num_blocks = 5
+        timestamps = []
+
+        miner = self._make_miner(block_interval_ms, timestamps)
+
+        # Trivial PoW: solve_block returns immediately (simulates weight ~1)
+        with patch(
+            "txstratum.dev.block_miner.solve_block", return_value=True
+        ):
+            await miner.start()
+            await self._wait_for_blocks(timestamps, num_blocks)
+            await miner.stop()
+
+        self._assert_regular_intervals(timestamps, num_blocks, block_interval_ms)
+
+    @unittest_run_loop
+    async def test_blocks_mined_at_regular_intervals_slow_mining(self):
+        """Even if solve_block takes a significant fraction of the interval
+        (e.g. without --test-mode-block-weight), the timing compensation in
+        _run() should keep block-to-block time close to block_interval_ms.
+        """
+        block_interval_ms = 200
+        num_blocks = 5
+        timestamps = []
+        call_count = 0
+
+        # Simulate mining that takes 60-90% of the interval
+        mining_delays_s = [0.15, 0.18, 0.12, 0.16, 0.14, 0.17]
+
+        def slow_solve_block(block):
+            nonlocal call_count
+            delay = mining_delays_s[min(call_count, len(mining_delays_s) - 1)]
+            call_count += 1
+            _time.sleep(delay)
+            return True
+
+        miner = self._make_miner(block_interval_ms, timestamps)
+
+        with patch(
+            "txstratum.dev.block_miner.solve_block", side_effect=slow_solve_block
+        ):
+            await miner.start()
+            await self._wait_for_blocks(timestamps, num_blocks)
+            await miner.stop()
+
+        self._assert_regular_intervals(timestamps, num_blocks, block_interval_ms)

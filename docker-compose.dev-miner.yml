@@ -13,8 +13,16 @@
 
 services:
   fullnode:
-    # Replace with your fullnode image/config
-    image: hathornetwork/hathor-core:stable
+    image: hathornetwork/hathor-core:test-mode-block-weight
+    command: [
+      "run_node",
+      "--status", "8080",
+      "--test-mode-tx-weight",
+      "--test-mode-block-weight",
+      "--allow-mining-without-peers",
+      "--unsafe-mode", "nano-testnet-bravo",
+      "--data", "./tmp",
+    ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1a/status"]
       interval: 5s
