@@ -98,6 +98,17 @@ def create_parser() -> ArgumentParser:
         default=None,
     )
     parser.add_argument(
+        "--dev-miner",
+        action="store_true",
+        help="Enable dev-miner mode: mine blocks and transactions in-process without stratum",
+    )
+    parser.add_argument(
+        "--block-interval",
+        help="Block mining interval in milliseconds (dev-miner mode only)",
+        type=int,
+        default=1000,
+    )
+    parser.add_argument(
         "backend", help="Endpoint of the Hathor API (without version)", type=str
     )
 
@@ -352,6 +363,112 @@ class RunService:
         self.loop.stop()
 
 
+class RunDevService:
+    """Run the service in dev-miner mode.
+
+    In this mode, the service mines blocks and transactions in-process
+    without the stratum protocol or external miners.
+    """
+
+    def __init__(self, args: Namespace) -> None:
+        """Initialize the dev-miner service."""
+        from hathorlib.client import HathorClient
+        from hathorlib.conf import HathorSettings
+
+        from txstratum.dev.block_miner import BlockMiner
+        from txstratum.dev.manager import DevMiningManager
+        from txstratum.healthcheck.healthcheck import HealthCheck
+
+        self.settings = HathorSettings()
+        self.args = args
+
+        # Reuse the same logging configuration
+        RunService.configure_logging(self, args)
+
+        self.loop: AbstractEventLoop = asyncio.get_event_loop()
+
+        self.backend: HathorClient = HathorClient(args.backend)
+        self.manager: DevMiningManager = DevMiningManager(backend=self.backend)
+        self.block_miner: BlockMiner = BlockMiner(
+            backend=self.backend,
+            address=args.address,
+            block_interval_ms=args.block_interval,
+        )
+        self.health_check: HealthCheck = HealthCheck(self.manager, self.backend)
+        self.tx_filters: List = []
+
+    def execute(self) -> None:
+        """Run the dev-miner service."""
+        from txstratum.api import App
+
+        self.loop.run_until_complete(self.backend.start())
+        self.loop.run_until_complete(self.manager.start())
+        self.loop.run_until_complete(self.block_miner.start())
+
+        api_app = App(
+            self.manager,
+            self.health_check,
+            max_tx_weight=self.args.max_tx_weight,
+            max_timestamp_delta=self.args.max_timestamp_delta,
+            tx_timeout=self.args.tx_timeout,
+            fix_invalid_timestamp=self.args.fix_invalid_timestamp,
+            only_standard_script=not self.args.allow_non_standard_script,
+        )
+
+        logger.info(
+            "Dev-miner mode enabled",
+            backend=self.args.backend,
+            address=self.args.address,
+            block_interval_ms=self.args.block_interval,
+            api_port=self.args.api_port,
+            network=self.settings.NETWORK_NAME,
+        )
+
+        web_runner = web.AppRunner(api_app.app, logger=logger)
+        self.loop.run_until_complete(web_runner.setup())
+        site = web.TCPSite(web_runner, "0.0.0.0", self.args.api_port)
+        self.loop.run_until_complete(site.start())
+
+        self.register_signal_handlers()
+
+        logger.info(
+            "TxMining API running at 0.0.0.0:{}...".format(self.args.api_port)
+        )
+        self.loop.run_forever()
+
+    def handle_shutdown_signal(self, signal: str) -> None:
+        """Handle shutdown signals."""
+        logger.info(f"{signal} received.")
+        self.loop.create_task(self._shutdown())
+
+    def register_signal_handlers(self) -> None:
+        """Register signal handlers."""
+        import signal
+
+        logger.info("Registering signal handlers...")
+
+        sigterm = getattr(signal, "SIGTERM", None)
+        if sigterm is not None:
+            self.loop.add_signal_handler(
+                sigterm, lambda: self.handle_shutdown_signal("SIGTERM")
+            )
+
+        sigint = getattr(signal, "SIGINT", None)
+        if sigint is not None:
+            self.loop.add_signal_handler(
+                sigint, lambda: self.handle_shutdown_signal("SIGINT")
+            )
+
+    async def _shutdown(self) -> None:
+        """Shutdown the dev-miner service."""
+        logger.info("Shutting down dev-miner...")
+        self.manager.shutdown()
+        await self.block_miner.stop()
+        await self.backend.stop()
+        await self.manager.stop()
+        self.loop.stop()
+
+
 def main() -> None:
     """Run the service using the cmdline."""
     parser = create_parser()
@@ -361,4 +478,7 @@ def main() -> None:
         if not os.environ.get("TXMINING_CONFIG_FILE"):
             os.environ["TXMINING_CONFIG_FILE"] = "hathorlib.conf.testnet"
 
-    RunService(args).execute()
+    if args.dev_miner:
+        RunDevService(args).execute()
+    else:
+        RunService(args).execute()
