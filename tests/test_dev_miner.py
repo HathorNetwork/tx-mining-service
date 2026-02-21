@@ -6,6 +6,7 @@ LICENSE file in the root directory of this source tree.
 """
 
 import asyncio
+import time as _time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
@@ -13,7 +14,7 @@ from hathorlib.base_transaction import tx_or_block_from_bytes
 
 import txstratum.time
 from txstratum.api import App
-from txstratum.dev.block_miner import solve_block
+from txstratum.dev.block_miner import BlockMiner, solve_block
 from txstratum.dev.manager import DevMiningManager
 from txstratum.dev.tx_miner import solve_tx
 from txstratum.jobs import JobStatus
@@ -245,3 +246,97 @@ class TestSolveBlock(AioHTTPTestCase):
         result = solve_block(block)
         self.assertTrue(result)
         self.assertTrue(block.verify_pow())
+
+
+class TestBlockMinerInterval(AioHTTPTestCase):
+    """Test that BlockMiner produces blocks at a steady cadence.
+
+    The block-to-block time should approximate block_interval_ms regardless
+    of how long the PoW solving takes (as long as it finishes within the
+    interval). This catches the bug where the miner sleeps the full interval
+    ON TOP of the mining time, making actual intervals = mining_time + interval.
+    """
+
+    __test__ = True
+
+    async def get_application(self):
+        from aiohttp import web
+
+        return web.Application()
+
+    @unittest_run_loop
+    async def test_blocks_mined_at_regular_intervals(self):
+        """At least 5 blocks should be mined ~once per block_interval_ms.
+
+        We simulate solve_block taking 60-90% of the interval (120-180ms out
+        of 200ms). Without the timing fix, actual intervals become 320-380ms
+        instead of the expected ~200ms, clearly exceeding the 40% tolerance.
+        """
+        block_interval_ms = 200
+        num_blocks = 5
+        timestamps = []
+
+        # Deterministic mining delays: 60-90% of the block interval
+        mining_delays_s = [0.15, 0.18, 0.12, 0.16, 0.14, 0.17]
+        call_count = 0
+
+        # Mock backend
+        backend = MagicMock()
+        template = MagicMock()
+        template.data = BLOCK_DATA
+        template.height = 1
+        backend.get_block_template = AsyncMock(return_value=template)
+
+        async def record_push(*args, **kwargs):
+            timestamps.append(_time.monotonic())
+
+        backend.push_tx_or_block = AsyncMock(side_effect=record_push)
+
+        def fake_solve_block(block):
+            """Simulate PoW solving that takes a non-trivial fraction of the interval."""
+            nonlocal call_count
+            delay = mining_delays_s[min(call_count, len(mining_delays_s) - 1)]
+            call_count += 1
+            _time.sleep(delay)
+            return True
+
+        with patch(
+            "txstratum.dev.block_miner.solve_block", side_effect=fake_solve_block
+        ):
+            miner = BlockMiner(backend=backend, block_interval_ms=block_interval_ms)
+            await miner.start()
+
+            # Wait for enough blocks (hard timeout prevents hanging)
+            timeout = _time.monotonic() + 5.0
+            while len(timestamps) < num_blocks and _time.monotonic() < timeout:
+                await asyncio.sleep(0.02)
+
+            await miner.stop()
+
+        self.assertGreaterEqual(
+            len(timestamps),
+            num_blocks,
+            f"Expected at least {num_blocks} blocks but only got {len(timestamps)}",
+        )
+
+        # Calculate block-to-block intervals
+        intervals_ms = [
+            (timestamps[i + 1] - timestamps[i]) * 1000
+            for i in range(num_blocks - 1)
+        ]
+
+        # 40% tolerance covers async scheduling jitter but NOT the bug:
+        #   Correct intervals:  ~200ms  → within 120-280ms ✓
+        #   Buggy intervals:    ~320ms+ → exceeds 280ms    ✗
+        tolerance_ms = block_interval_ms * 0.40
+
+        for i, interval in enumerate(intervals_ms):
+            self.assertAlmostEqual(
+                interval,
+                block_interval_ms,
+                delta=tolerance_ms,
+                msg=(
+                    f"Interval block {i + 1} -> {i + 2}: {interval:.0f}ms "
+                    f"(expected ~{block_interval_ms}ms +/-{tolerance_ms:.0f}ms)"
+                ),
+            )

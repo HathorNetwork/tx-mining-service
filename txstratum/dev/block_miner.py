@@ -97,6 +97,8 @@ class BlockMiner:
         await self._wait_for_fullnode()
 
         while self._running:
+            cycle_start = txstratum.time.time()
+
             try:
                 await self._mine_one_block()
             except asyncio.CancelledError:
@@ -106,7 +108,10 @@ class BlockMiner:
                 await asyncio.sleep(1)
                 continue
 
-            await asyncio.sleep(self.block_interval_s)
+            elapsed = txstratum.time.time() - cycle_start
+            remaining = self.block_interval_s - elapsed
+            if remaining > 0:
+                await asyncio.sleep(remaining)
 
     async def _mine_one_block(self) -> None:
         """Fetch a block template, solve it, and submit it."""
@@ -115,7 +120,9 @@ class BlockMiner:
         template = await self.backend.get_block_template(address=self.address)
         block = Block.create_from_struct(template.data)
 
-        if not solve_block(block):
+        loop = asyncio.get_event_loop()
+        solved = await loop.run_in_executor(None, solve_block, block)
+        if not solved:
             self.log.error("Failed to solve block", height=template.height)
             return
 
