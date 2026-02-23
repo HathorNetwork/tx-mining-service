@@ -1,8 +1,21 @@
 # Example docker-compose for running tx-mining-service in dev-miner mode.
 #
-# This replaces both `tx-mining-service` + `cpuminer` with a single service.
-# The dev-miner mines blocks in-process (no external miner needed) and solves
-# transaction PoW synchronously.
+# BEFORE (production-like test setup):
+#
+#   fullnode ──stratum──▶ tx-mining-service ◀──stratum──── cpuminer
+#                              ▲
+#                              │ HTTP
+#                        test runner
+#
+# AFTER (dev-miner setup):
+#
+#   fullnode ◀──HTTP──── tx-mining-service (dev-miner mode)
+#                              ▲
+#                              │ HTTP
+#                        test runner
+#
+# The cpuminer container is eliminated entirely. tx-mining-service handles
+# both block production (background loop) and transaction PoW (in-process).
 #
 # Usage:
 #   docker compose -f docker-compose.dev-miner.yml up
@@ -13,11 +26,18 @@
 
 services:
   fullnode:
+    # This image must include the --test-mode-block-weight flag, which is a
+    # proposed change to hathor-core that reduces block weight to 1 (bypassing
+    # the DAA), just like --test-mode-tx-weight does for transactions.
+    # See: https://github.com/HathorNetwork/hathor-core (branch: feature/test-mode-block-weight)
     image: hathor-core:test-mode-block-weight
     command: [
       "run_node",
       "--status", "8080",
+      # Reduce transaction weight to ~1 (existing flag, already used in tests).
       "--test-mode-tx-weight",
+      # Reduce block weight to 1 (NEW flag from this RFC). Without this, blocks
+      # still require full DAA weight, making in-process mining impractical.
       "--test-mode-block-weight",
       "--allow-mining-without-peers",
       "--unsafe-mode", "nano-testnet-bravo",
@@ -43,10 +63,15 @@ services:
       - "8035:8035"
     command: [
       "http://fullnode:8080",
+      # Enables dev-miner mode (RunDevService instead of RunService).
       "--dev-miner",
       "--api-port=8035",
+      # Produce one block per second. This gives tests a predictable cadence
+      # for reward lock releases and confirmation accumulation.
       "--block-interval=1000",
       "--testnet",
+      # Mining rewards go to this address. In test environments, this is
+      # typically a pre-generated address from the test wallet.
       "--address", "WTjhJXzQJETVx7BVXdyZmvk396DRRsubdw",
     ]
     networks:

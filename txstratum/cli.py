@@ -97,6 +97,11 @@ def create_parser() -> ArgumentParser:
         type=int,
         default=None,
     )
+    # --- Dev-miner mode arguments ---
+    # These enable an alternative execution path (RunDevService instead of
+    # RunService) that replaces the stratum server + cpuminer with in-process
+    # mining. Intended for integration test environments where the full
+    # production mining stack is unnecessary overhead.
     parser.add_argument(
         "--dev-miner",
         action="store_true",
@@ -364,10 +369,22 @@ class RunService:
 
 
 class RunDevService:
-    """Run the service in dev-miner mode.
+    """Alternative service runner for dev/test environments.
 
-    In this mode, the service mines blocks and transactions in-process
-    without the stratum protocol or external miners.
+    This is the counterpart to RunService (the production runner). When the
+    user passes --dev-miner on the CLI, main() instantiates this class instead
+    of RunService.
+
+    Key differences from RunService:
+    - No stratum server — no StratumProtocol, no PubSubManager, no create_server
+    - No tx_filters, no prometheus — features that don't apply to test environments
+    - Uses DevMiningManager (in-process tx mining) instead of TxMiningManager
+    - Adds a BlockMiner (in-process block production) — in production, cpuminer
+      fills this role by connecting to the stratum server
+
+    The HTTP API (txstratum/api.py) is started identically to RunService,
+    because DevMiningManager implements the same interface as TxMiningManager.
+    From the API's perspective, nothing changes.
     """
 
     def __init__(self, args: Namespace) -> None:
@@ -382,29 +399,42 @@ class RunDevService:
         self.settings = HathorSettings()
         self.args = args
 
-        # Reuse the same logging configuration
+        # Reuse RunService's logging setup — no reason to diverge here.
         RunService.configure_logging(self, args)
 
         self.loop: AbstractEventLoop = asyncio.get_event_loop()
 
         self.backend: HathorClient = HathorClient(args.backend)
+
+        # DevMiningManager replaces TxMiningManager — handles tx PoW in-process.
         self.manager: DevMiningManager = DevMiningManager(backend=self.backend)
+
+        # BlockMiner replaces cpuminer — produces blocks at a steady interval.
         self.block_miner: BlockMiner = BlockMiner(
             backend=self.backend,
             address=args.address,
             block_interval_ms=args.block_interval,
         )
+
+        # HealthCheck accepts the manager interface, works with both managers.
         self.health_check: HealthCheck = HealthCheck(self.manager, self.backend)
         self.tx_filters: List = []
 
     def execute(self) -> None:
-        """Run the dev-miner service."""
+        """Run the dev-miner service.
+
+        Startup order matters: backend must connect before the manager starts
+        accepting jobs, and the manager must be running before the BlockMiner
+        starts producing blocks (otherwise submitted blocks could fail).
+        """
         from txstratum.api import App
 
         self.loop.run_until_complete(self.backend.start())
         self.loop.run_until_complete(self.manager.start())
         self.loop.run_until_complete(self.block_miner.start())
 
+        # The App constructor accepts any object with the TxMiningManager
+        # interface. DevMiningManager satisfies this — no API code changes.
         api_app = App(
             self.manager,
             self.health_check,
@@ -460,7 +490,11 @@ class RunDevService:
             )
 
     async def _shutdown(self) -> None:
-        """Shutdown the dev-miner service."""
+        """Shutdown the dev-miner service.
+
+        Simpler than RunService._shutdown — no graceful drain needed because
+        tx mining is near-instant (no stratum round-trip to wait for).
+        """
         logger.info("Shutting down dev-miner...")
         self.manager.shutdown()
         await self.block_miner.stop()
@@ -478,6 +512,9 @@ def main() -> None:
         if not os.environ.get("TXMINING_CONFIG_FILE"):
             os.environ["TXMINING_CONFIG_FILE"] = "hathorlib.conf.testnet"
 
+    # Route to the appropriate service runner based on --dev-miner flag.
+    # Both runners expose the same HTTP API; they differ only in how they
+    # mine transactions and blocks (stratum vs. in-process).
     if args.dev_miner:
         RunDevService(args).execute()
     else:

@@ -5,6 +5,17 @@ This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
 
+"""Tests for the dev-miner mode.
+
+These tests validate the three core components of the dev-miner:
+
+1. solve_tx / solve_block — brute-force PoW solvers that replace stratum miners
+2. DevMiningManager — drop-in replacement for TxMiningManager, tested through
+   the same HTTP API endpoints that production uses (submit-job, job-status, etc.)
+3. BlockMiner — background block producer, tested for interval regularity under
+   both trivial and slow mining conditions
+"""
+
 import asyncio
 import time as _time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,7 +30,9 @@ from txstratum.dev.manager import DevMiningManager
 from txstratum.dev.tx_miner import solve_tx
 from txstratum.jobs import JobStatus
 
-# Same TX1_DATA from test_api.py
+# Same TX1_DATA from test_api.py — a serialized transaction that we use as a
+# realistic input for PoW solving. The weight is ~32, so without
+# --test-mode-tx-weight it requires ~2^32 nonce iterations (a few seconds).
 TX1_DATA = bytes.fromhex(
     "0001000102000000000000089c0d40a9b1edfb499bc624833fde87ae459d495000393f4aaa00006"
     "a473045022100c407d5e8f411f9ae582ebd7acbfcb6ea6170332709fb69acaa34c1b426f1d8f502"
@@ -33,14 +46,28 @@ TX1_DATA = bytes.fromhex(
 
 
 def update_timestamp(tx_bytes: bytes, *, delta: int = 0) -> bytes:
-    """Update timestamp to current timestamp."""
+    """Update timestamp to current timestamp.
+
+    The fullnode rejects transactions with timestamps too far from the current
+    time, so we refresh the timestamp before each test.
+    """
     tx = tx_or_block_from_bytes(tx_bytes)
     tx.timestamp = int(txstratum.time.time()) + delta
     return bytes(tx)
 
 
+# ---------------------------------------------------------------------------
+# Transaction PoW tests
+# ---------------------------------------------------------------------------
+
+
 class TestSolveTx(AioHTTPTestCase):
-    """Test the synchronous tx miner."""
+    """Test the synchronous tx miner (solve_tx).
+
+    These verify that the nonce brute-force loop finds a valid PoW solution
+    for both trivial weight (~1, simulating --test-mode-tx-weight) and the
+    transaction's natural weight (~32).
+    """
 
     __test__ = True
 
@@ -53,17 +80,18 @@ class TestSolveTx(AioHTTPTestCase):
         return self.myapp.app
 
     def test_solve_tx_trivial_weight(self):
-        """Test that solve_tx works with a transaction of trivial weight."""
+        """With weight=1 (--test-mode-tx-weight), ~50% of nonces are valid."""
         tx_bytes = update_timestamp(TX1_DATA)
         tx = tx_or_block_from_bytes(tx_bytes)
-        # Set weight to 1 (trivial - ~50% of nonces work)
         tx.weight = 1.0
         result = solve_tx(tx)
         self.assertTrue(result)
         self.assertTrue(tx.verify_pow())
 
     def test_solve_tx_standard_weight(self):
-        """Test that solve_tx works with the transaction's default weight."""
+        """With the transaction's natural weight (~32), solve_tx still works
+        but takes more iterations. This validates the full nonce range.
+        """
         tx_bytes = update_timestamp(TX1_DATA)
         tx = tx_or_block_from_bytes(tx_bytes)
         result = solve_tx(tx)
@@ -71,8 +99,18 @@ class TestSolveTx(AioHTTPTestCase):
         self.assertTrue(tx.verify_pow())
 
 
+# ---------------------------------------------------------------------------
+# DevMiningManager tests (via HTTP API)
+# ---------------------------------------------------------------------------
+
+
 class TestDevMiningManager(AioHTTPTestCase):
-    """Test the DevMiningManager."""
+    """Test DevMiningManager through the same HTTP API used in production.
+
+    These tests exercise the full job lifecycle: submit-job → poll job-status →
+    done. They prove that DevMiningManager is a valid drop-in for TxMiningManager
+    without any API-level changes.
+    """
 
     __test__ = True
 
@@ -90,7 +128,7 @@ class TestDevMiningManager(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_submit_and_poll_job(self):
-        """Test submitting a job and polling for its status."""
+        """Basic lifecycle: submit a tx, poll until solved."""
         tx_hex = update_timestamp(TX1_DATA).hex()
         resp = await self.client.request(
             "POST", "/submit-job", json={"tx": tx_hex}
@@ -99,9 +137,11 @@ class TestDevMiningManager(AioHTTPTestCase):
         data = await resp.json()
         job_id = data["job_id"]
         self.assertIn("status", data)
+        # expected_total_time is 0 because there's no queue or stratum latency.
         self.assertEqual(0, data["expected_total_time"])
 
-        # Wait for async mining to complete (TX1_DATA has weight ~32, may need more time)
+        # Poll for completion. Mining runs in an async task (via run_in_executor),
+        # so we need to give it time to finish.
         for _ in range(50):
             await asyncio.sleep(0.1)
             resp = await self.client.request(
@@ -117,7 +157,7 @@ class TestDevMiningManager(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_submit_job_with_parents(self):
-        """Test submitting a job that needs parents."""
+        """Test that add_parents=True fetches parents from the fullnode before mining."""
         tx_hex = update_timestamp(TX1_DATA).hex()
         resp = await self.client.request(
             "POST",
@@ -128,7 +168,6 @@ class TestDevMiningManager(AioHTTPTestCase):
         data = await resp.json()
         job_id = data["job_id"]
 
-        # Wait for async mining to complete
         for _ in range(50):
             await asyncio.sleep(0.1)
             resp = await self.client.request(
@@ -139,12 +178,11 @@ class TestDevMiningManager(AioHTTPTestCase):
                 break
 
         self.assertEqual("done", data["status"])
-        # Verify parents were set
         self.assertEqual(2, len(data["tx"]["parents"]))
 
     @unittest_run_loop
     async def test_submit_job_with_propagate(self):
-        """Test submitting a job with propagate=True."""
+        """Test that propagate=True pushes the solved tx to the fullnode."""
         tx_hex = update_timestamp(TX1_DATA).hex()
         resp = await self.client.request(
             "POST",
@@ -155,7 +193,6 @@ class TestDevMiningManager(AioHTTPTestCase):
         data = await resp.json()
         job_id = data["job_id"]
 
-        # Wait for async mining to complete
         for _ in range(50):
             await asyncio.sleep(0.1)
             resp = await self.client.request(
@@ -165,12 +202,11 @@ class TestDevMiningManager(AioHTTPTestCase):
             if data["status"] == "done":
                 break
 
-        # Verify push_tx_or_block was called
         self.backend.push_tx_or_block.assert_called_once()
 
     @unittest_run_loop
     async def test_health_check(self):
-        """Test health endpoint works with dev manager."""
+        """Health endpoint works unchanged with DevMiningManager."""
         health_check_result = MagicMock()
         health_check_result.get_http_status_code.return_value = 200
         health_check_result.to_json.return_value = {"status": "pass"}
@@ -187,24 +223,30 @@ class TestDevMiningManager(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_mining_status(self):
-        """Test mining-status endpoint with dev manager."""
+        """mining-status endpoint exposes the dev_miner flag.
+
+        Clients can use this flag to detect that the service is running in
+        dev-miner mode (e.g., to adjust timeout expectations).
+        """
         resp = await self.client.request("GET", "/mining-status")
         self.assertEqual(200, resp.status)
         data = await resp.json()
         self.assertTrue(data["dev_miner"])
+        # No stratum miners in dev-miner mode.
         self.assertEqual(0, len(data["miners"]))
 
     @unittest_run_loop
     async def test_manager_status(self):
-        """Test DevMiningManager status method."""
+        """DevMiningManager.status() and health-related methods."""
         status = self.manager.status()
         self.assertTrue(status["dev_miner"])
+        # has_any_miner() always returns True — the dev-miner itself is the miner.
         self.assertTrue(self.manager.has_any_miner())
         self.assertTrue(self.manager.has_any_submitted_job_in_period(3600))
 
     @unittest_run_loop
     async def test_duplicate_job_submission(self):
-        """Test that submitting the same job twice returns existing job."""
+        """Submitting the same tx twice returns the existing job (same as production)."""
         tx_hex = update_timestamp(TX1_DATA).hex()
 
         resp1 = await self.client.request(
@@ -222,6 +264,11 @@ class TestDevMiningManager(AioHTTPTestCase):
         self.assertEqual(data1["job_id"], data2["job_id"])
 
 
+# ---------------------------------------------------------------------------
+# Block mining tests
+# ---------------------------------------------------------------------------
+
+# A serialized block template used for testing solve_block.
 BLOCK_DATA = bytes.fromhex(
     "000001ffffffe8b789180000001976a9147fd4ae0e4fb2d2854e76d359029d8078bb9"
     "9649e88ac40350000000000005e0f84a9000000000000000000000000000000278a7e"
@@ -229,7 +276,7 @@ BLOCK_DATA = bytes.fromhex(
 
 
 class TestSolveBlock(AioHTTPTestCase):
-    """Test the block mining solve function."""
+    """Test the block PoW solver (solve_block)."""
 
     __test__ = True
 
@@ -239,7 +286,7 @@ class TestSolveBlock(AioHTTPTestCase):
         return web.Application()
 
     def test_solve_block_from_template(self):
-        """Test that solve_block can solve a block from a real template."""
+        """Verify that solve_block can find a valid nonce for a real block template."""
         from hathorlib import Block
 
         block = Block.create_from_struct(BLOCK_DATA)
@@ -251,9 +298,17 @@ class TestSolveBlock(AioHTTPTestCase):
 class TestBlockMinerInterval(AioHTTPTestCase):
     """Test that BlockMiner produces blocks at a steady cadence.
 
-    With --test-mode-block-weight on the fullnode, block PoW is trivial
-    (weight ~1, most nonces valid on the first try). These tests verify
-    that the miner produces blocks at the configured interval.
+    This is the key property that makes the dev-miner useful for integration
+    tests: blocks arrive at predictable intervals, so tests can reason about
+    when reward locks release and confirmations accumulate.
+
+    Two scenarios are tested:
+    1. Trivial PoW (--test-mode-block-weight): solve_block is instant, so the
+       interval is entirely determined by the sleep.
+    2. Slow PoW (no --test-mode-block-weight): solve_block takes a significant
+       fraction of the interval. The timing compensation in BlockMiner._run()
+       (sleep for interval minus elapsed time) should keep block-to-block time
+       close to the configured interval.
     """
 
     __test__ = True
@@ -287,7 +342,7 @@ class TestBlockMinerInterval(AioHTTPTestCase):
 
     def _assert_regular_intervals(self, timestamps, num_blocks, block_interval_ms,
                                   tolerance_pct=0.40):
-        """Assert that block-to-block intervals are within tolerance."""
+        """Assert that block-to-block intervals are within tolerance of the target."""
         self.assertGreaterEqual(
             len(timestamps),
             num_blocks,
@@ -313,8 +368,8 @@ class TestBlockMinerInterval(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_blocks_mined_at_regular_intervals_trivial_weight(self):
-        """With trivial block weight (test-mode), solve_block returns almost
-        instantly and blocks should be mined exactly once per interval.
+        """With trivial block weight (--test-mode-block-weight), solve_block
+        returns almost instantly, so the interval is purely sleep-driven.
         """
         block_interval_ms = 200
         num_blocks = 5
@@ -322,7 +377,7 @@ class TestBlockMinerInterval(AioHTTPTestCase):
 
         miner = self._make_miner(block_interval_ms, timestamps)
 
-        # Trivial PoW: solve_block returns immediately (simulates weight ~1)
+        # Mock solve_block to return immediately (simulates weight ~1).
         with patch(
             "txstratum.dev.block_miner.solve_block", return_value=True
         ):
@@ -334,16 +389,18 @@ class TestBlockMinerInterval(AioHTTPTestCase):
 
     @unittest_run_loop
     async def test_blocks_mined_at_regular_intervals_slow_mining(self):
-        """Even if solve_block takes a significant fraction of the interval
-        (e.g. without --test-mode-block-weight), the timing compensation in
-        _run() should keep block-to-block time close to block_interval_ms.
+        """Even when solve_block takes 60-90% of the interval (simulating
+        environments without --test-mode-block-weight), the timing compensation
+        in _run() keeps block-to-block time close to the configured interval.
+
+        This proves the `remaining = interval - elapsed` logic works correctly.
         """
         block_interval_ms = 200
         num_blocks = 5
         timestamps = []
         call_count = 0
 
-        # Simulate mining that takes 60-90% of the interval
+        # Simulate mining that takes 60-90% of the interval.
         mining_delays_s = [0.15, 0.18, 0.12, 0.16, 0.14, 0.17]
 
         def slow_solve_block(block):
