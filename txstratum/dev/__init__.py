@@ -24,3 +24,9 @@
 #   manager.py     - Drop-in replacement for TxMiningManager. Implements the
 #                    same interface consumed by the HTTP API layer, so the API
 #                    code doesn't need any changes.
+
+# Full 32-bit nonce space, shared by both tx_miner and block_miner.
+# Even at standard weight (~22), the expected number of iterations is ~2^22
+# (~4M), well within the 2^32 (~4B) range. With --test-mode-tx-weight or
+# --test-mode-block-weight (weight ~1), ~50% of nonces are valid.
+MAX_NONCE = 2**32

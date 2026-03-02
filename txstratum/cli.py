@@ -399,7 +399,9 @@ class RunDevService:
         self.settings = HathorSettings()
         self.args = args
 
-        # Reuse RunService's logging setup — no reason to diverge here.
+        # Reuse RunService's logging setup to avoid modifying production code
+        # in this first contribution. A future improvement could extract
+        # configure_logging into a standalone function (it only uses `args`).
         RunService.configure_logging(self, args)
 
         self.loop: AbstractEventLoop = asyncio.get_event_loop()
@@ -418,7 +420,6 @@ class RunDevService:
 
         # HealthCheck accepts the manager interface, works with both managers.
         self.health_check: HealthCheck = HealthCheck(self.manager, self.backend)
-        self.tx_filters: List = []
 
     def execute(self) -> None:
         """Run the dev-miner service.
@@ -435,6 +436,10 @@ class RunDevService:
 
         # The App constructor accepts any object with the TxMiningManager
         # interface. DevMiningManager satisfies this — no API code changes.
+        # Note: tx_filters (ban lists, TOI) are omitted because they don't
+        # apply to test environments. They could be wired up here for
+        # compatibility, but there's no current use case for filtering in
+        # dev-miner mode.
         api_app = App(
             self.manager,
             self.health_check,
@@ -465,6 +470,10 @@ class RunDevService:
             "TxMining API running at 0.0.0.0:{}...".format(self.args.api_port)
         )
         self.loop.run_forever()
+
+    # Signal handling methods are intentionally duplicated from RunService to
+    # avoid modifying production code in this first contribution. A future
+    # improvement could extract them into a shared base class or mixin.
 
     def handle_shutdown_signal(self, signal: str) -> None:
         """Handle shutdown signals."""

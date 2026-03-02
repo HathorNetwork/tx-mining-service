@@ -101,6 +101,8 @@ class DevMiningManager:
             "started_at": self.started_at,
             "txs_solved": self.txs_solved,
             "txs_timeout": self.txs_timeout,
+            # Block mining is handled by BlockMiner (separate component);
+            # this manager only tracks transaction mining statistics.
             "blocks_found": 0,
             "uptime": self.uptime,
             "tx_queue": 0,

@@ -22,12 +22,9 @@ the async event loop (see manager.py).
 from hathorlib.base_transaction import BaseTransaction
 from structlog import get_logger
 
-logger = get_logger()
+from txstratum.dev import MAX_NONCE
 
-# Full 32-bit nonce space. Even at standard weight (~22), the expected number
-# of iterations is ~2^22 (~4M), well within the 2^32 (~4B) range. With
-# --test-mode-tx-weight (weight ~1), ~50% of nonces are valid.
-MAX_NONCE = 2**32
+logger = get_logger()
 
 
 def solve_tx(tx: BaseTransaction) -> bool:

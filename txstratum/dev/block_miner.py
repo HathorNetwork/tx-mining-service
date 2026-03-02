@@ -36,14 +36,12 @@ from hathorlib.exceptions import PushTxFailed
 from structlog import get_logger
 
 import txstratum.time
+from txstratum.dev import MAX_NONCE
 
 if TYPE_CHECKING:
     from hathorlib.client import HathorClient
 
 logger = get_logger()
-
-# Full 32-bit nonce space.
-MAX_NONCE = 2**32
 
 
 def solve_block(block: Block) -> bool:

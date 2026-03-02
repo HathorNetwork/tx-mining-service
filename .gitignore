@@ -17,3 +17,6 @@ dist/
 *.egg-info
 
 htmlcov/
+
+claude.md
+.claude/
