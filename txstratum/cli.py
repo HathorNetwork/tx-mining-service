@@ -182,7 +182,8 @@ class RunService:
         )
         self.health_check: HealthCheck = HealthCheck(self.manager, self.backend)
 
-    def configure_logging(self, args: Namespace) -> None:
+    @staticmethod
+    def configure_logging(args: Namespace) -> None:
         """Configure logging."""
         from txstratum.utils import start_logging
 
@@ -399,10 +400,7 @@ class RunDevService:
         self.settings = HathorSettings()
         self.args = args
 
-        # Reuse RunService's logging setup to avoid modifying production code
-        # in this first iteration. A future improvement could extract
-        # configure_logging into a standalone function (it only uses `args`).
-        RunService.configure_logging(self, args)
+        RunService.configure_logging(args)
 
         self.loop: AbstractEventLoop = asyncio.get_event_loop()
 

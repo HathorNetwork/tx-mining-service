@@ -87,7 +87,7 @@ class BlockMiner:
         self.block_interval_s = block_interval_ms / 1000.0
         self.blocks_found = 0
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: Optional[asyncio.Task[None]] = None
 
     async def start(self) -> None:
         """Start the block mining loop."""

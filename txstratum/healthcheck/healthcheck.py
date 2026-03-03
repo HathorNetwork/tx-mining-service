@@ -13,7 +13,7 @@ from healthcheck import (
 )
 
 if TYPE_CHECKING:
-    from txstratum.manager import TxMiningManager
+    from txstratum.protocols import MiningManager
 
 
 class HealthCheck:
@@ -22,7 +22,7 @@ class HealthCheck:
     It will aggregate the responses into a final object to be returned following our standards.
     """
 
-    def __init__(self, manager: "TxMiningManager", backend: "HathorClient") -> None:
+    def __init__(self, manager: "MiningManager", backend: "HathorClient") -> None:
         """Init the class with the components that will be checked."""
         self.healthcheck = Healthcheck("TxMiningService")
 
@@ -123,7 +123,7 @@ class MiningHealthCheck(ComponentHealthCheckInterface):
     JOB_MINING_TIME_THRESHOLD = 10  # 10 seconds
     COMPONENT_NAME = "manager"
 
-    def __init__(self, manager: "TxMiningManager") -> None:
+    def __init__(self, manager: "MiningManager") -> None:
         """Init the class with the manager instance."""
         self.manager = manager
         self.last_response = HealthcheckCallbackResponse(

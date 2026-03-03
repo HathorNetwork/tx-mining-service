@@ -61,7 +61,7 @@ class DevMiningManager:
         self.backend = backend
         self.started_at: float = 0
         self.tx_jobs: Dict[bytes, TxJob] = {}
-        self._tasks: Dict[bytes, asyncio.Task] = {}
+        self._tasks: Dict[bytes, asyncio.Task[None]] = {}
         self.refuse_new_jobs = False
 
         # Statistics — same fields as TxMiningManager for API compatibility.
