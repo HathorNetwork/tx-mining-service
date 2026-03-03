@@ -17,6 +17,7 @@ These tests validate the three core components of the dev-miner:
 
 import asyncio
 import time as _time
+import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
@@ -59,7 +60,7 @@ def update_timestamp(tx_bytes: bytes, *, delta: int = 0) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-class TestSolveTx(AioHTTPTestCase):
+class TestSolveTx(unittest.TestCase):
     """Test the synchronous tx miner (solve_tx).
 
     These verify that the nonce brute-force loop finds a valid PoW solution
@@ -68,14 +69,6 @@ class TestSolveTx(AioHTTPTestCase):
     """
 
     __test__ = True
-
-    async def get_application(self):
-        backend = MagicMock()
-        backend.get_tx_parents = AsyncMock(return_value=[b"\x00" * 32, b"\x01" * 32])
-        self.manager = DevMiningManager(backend=backend)
-        self.healthcheck = MagicMock()
-        self.myapp = App(self.manager, self.healthcheck)
-        return self.myapp.app
 
     def test_solve_tx_trivial_weight(self):
         """With weight=1 (--test-mode-tx-weight), ~50% of nonces are valid."""

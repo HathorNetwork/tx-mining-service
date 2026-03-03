@@ -31,6 +31,7 @@ on the first nonce — so blocks are produced at an almost exactly regular pace.
 import asyncio
 from typing import TYPE_CHECKING, Optional
 
+from aiohttp import ClientError
 from hathorlib import Block
 from hathorlib.exceptions import PushTxFailed
 from structlog import get_logger
@@ -117,7 +118,7 @@ class BlockMiner:
                 await self.backend.get_block_template(address=self.address)
                 self.log.info("Fullnode is ready")
                 return
-            except Exception:
+            except (ClientError, OSError, RuntimeError):
                 self.log.info("Waiting for fullnode to become available...")
             await asyncio.sleep(1)
 
@@ -173,7 +174,7 @@ class BlockMiner:
         try:
             await self.backend.push_tx_or_block(bytes(block))
         except PushTxFailed:
-            self.log.error(
+            self.log.exception(
                 "Block rejected by fullnode",
                 height=template.height,
                 hash=block.hash_hex,

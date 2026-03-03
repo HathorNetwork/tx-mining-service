@@ -507,8 +507,8 @@ class RunDevService:
         logger.info("Shutting down dev-miner...")
         self.manager.shutdown()
         await self.block_miner.stop()
-        await self.backend.stop()
         await self.manager.stop()
+        await self.backend.stop()
         self.loop.stop()
 
 

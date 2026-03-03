@@ -170,7 +170,7 @@ class DevMiningManager:
         try:
             parents: List[bytes] = await self.backend.get_tx_parents()
         except Exception as e:
-            job.mark_as_failed(f"Failed to get parents: {e}")
+            job.mark_as_failed(f"Failed to get parents ({type(e).__name__}): {e}")
             self.txs_failed += 1
             self._schedule_cleanup(job)
             return
