@@ -75,6 +75,7 @@ class BlockMiner:
         address: Optional[str] = None,
         block_interval_ms: int = 1000,
     ):
+        """Initialize the block miner."""
         self.log = logger.new()
         self.backend = backend
         self.address = address
@@ -121,7 +122,7 @@ class BlockMiner:
             await asyncio.sleep(1)
 
     async def _run(self) -> None:
-        """Main mining loop.
+        """Run the main mining loop.
 
         The timing compensation logic (sleep for interval minus elapsed time)
         ensures that blocks are produced at a steady cadence regardless of how

@@ -27,7 +27,6 @@ from txstratum.api import App
 from txstratum.dev.block_miner import BlockMiner, solve_block
 from txstratum.dev.manager import DevMiningManager
 from txstratum.dev.tx_miner import solve_tx
-from txstratum.jobs import JobStatus
 
 # Same TX1_DATA from test_api.py — a serialized transaction that we use as a
 # realistic input for PoW solving. The weight is ~32, so without

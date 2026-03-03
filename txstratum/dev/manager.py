@@ -57,6 +57,7 @@ class DevMiningManager:
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
     def __init__(self, backend: "HathorClient"):
+        """Initialize the dev mining manager."""
         self.log = logger.new()
         self.backend = backend
         self.started_at: float = 0
@@ -79,6 +80,7 @@ class DevMiningManager:
 
     @property
     def uptime(self) -> float:
+        """Return the manager uptime in seconds."""
         if not self.started_at:
             return 0.0
         return txstratum.time.time() - self.started_at
@@ -248,7 +250,7 @@ class DevMiningManager:
         self.refuse_new_jobs = True
 
     def has_any_miner(self) -> bool:
-        """Always True — the dev-miner itself is the miner.
+        """Return True; the dev-miner itself is the miner.
 
         The health check uses this to determine if the service is operational.
         In production, this checks for connected stratum miners.
@@ -256,7 +258,7 @@ class DevMiningManager:
         return True
 
     def has_any_submitted_job_in_period(self, period: int) -> bool:
-        """Always True — prevents the health check from reporting unhealthy.
+        """Return True to indicate the dev-miner is always active.
 
         In production, this checks recent job activity to detect stale services.
         The dev-miner is always "active" by definition.
