@@ -127,3 +127,79 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
             )
 
         self.assertEqual(content_expected, content)
+
+    async def test_disconnect_removes_miner_metrics(self):
+        """After disconnect, all label series for the miner_id must be removed."""
+        protocol = StratumProtocol(self.manager)
+        protocol.miner_id = "disc1"
+        protocol.miner_address_str = "addr_disc"
+        protocol.miner_version = "cpuminer/1.0"
+        self.manager.miners["m1"] = protocol
+
+        prometheus = PrometheusExporter(self.manager, self.pubsub, self.tmpdir)
+
+        # Subscribe the miner (creates label series)
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol)
+        await self._run_all_pending_events()
+        await prometheus.update_metrics()
+
+        with open(prometheus.filepath, "r") as fp:
+            content = fp.read()
+        self.assertIn('miner_id="disc1"', content)
+
+        # Disconnect the miner
+        del self.manager.miners["m1"]
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, protocol)
+        await self._run_all_pending_events()
+        await prometheus.update_metrics()
+
+        with open(prometheus.filepath, "r") as fp:
+            content = fp.read()
+        self.assertNotIn('miner_id="disc1"', content)
+
+    async def test_reconnect_only_exports_new_miner_id(self):
+        """After reconnect (new miner_id), old miner_id labels must be absent."""
+        protocol1 = StratumProtocol(self.manager)
+        protocol1.miner_id = "old_id"
+        protocol1.miner_address_str = "addr_recon"
+        protocol1.miner_version = "cpuminer/1.0"
+        self.manager.miners["m1"] = protocol1
+
+        prometheus = PrometheusExporter(self.manager, self.pubsub, self.tmpdir)
+
+        # Subscribe first connection
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol1)
+        await self._run_all_pending_events()
+        await prometheus.update_metrics()
+
+        with open(prometheus.filepath, "r") as fp:
+            content = fp.read()
+        self.assertIn('miner_id="old_id"', content)
+
+        # Disconnect first connection
+        del self.manager.miners["m1"]
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, protocol1)
+        await self._run_all_pending_events()
+
+        # Reconnect with new miner_id
+        protocol2 = StratumProtocol(self.manager)
+        protocol2.miner_id = "new_id"
+        protocol2.miner_address_str = "addr_recon"
+        protocol2.miner_version = "cpuminer/1.0"
+        self.manager.miners["m1"] = protocol2
+
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol2)
+        await self._run_all_pending_events()
+        await prometheus.update_metrics()
+
+        with open(prometheus.filepath, "r") as fp:
+            content = fp.read()
+        self.assertNotIn('miner_id="old_id"', content)
+        self.assertIn('miner_id="new_id"', content)
+
+        # Clean up: disconnect the reconnected miner so its label series are
+        # removed from the module-level METRICS_PUBSUB globals before the next
+        # test case runs.
+        del self.manager.miners["m1"]
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, protocol2)
+        await self._run_all_pending_events()
