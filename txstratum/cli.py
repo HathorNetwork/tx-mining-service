@@ -400,7 +400,7 @@ class RunDevService:
         self.args = args
 
         # Reuse RunService's logging setup to avoid modifying production code
-        # in this first contribution. A future improvement could extract
+        # in this first iteration. A future improvement could extract
         # configure_logging into a standalone function (it only uses `args`).
         RunService.configure_logging(self, args)
 
@@ -472,7 +472,7 @@ class RunDevService:
         self.loop.run_forever()
 
     # Signal handling methods are intentionally duplicated from RunService to
-    # avoid modifying production code in this first contribution. A future
+    # avoid modifying production code in this first iteration. A future
     # improvement could extract them into a shared base class or mixin.
 
     def handle_shutdown_signal(self, signal: str) -> None:
