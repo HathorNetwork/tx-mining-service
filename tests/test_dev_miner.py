@@ -121,9 +121,7 @@ class TestDevMiningManager(AioHTTPTestCase):
     async def test_submit_and_poll_job(self):
         """Basic lifecycle: submit a tx, poll until solved."""
         tx_hex = update_timestamp(TX1_DATA).hex()
-        resp = await self.client.request(
-            "POST", "/submit-job", json={"tx": tx_hex}
-        )
+        resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex})
         self.assertEqual(200, resp.status)
         data = await resp.json()
         job_id = data["job_id"]
@@ -240,15 +238,11 @@ class TestDevMiningManager(AioHTTPTestCase):
         """Submitting the same tx twice returns the existing job (same as production)."""
         tx_hex = update_timestamp(TX1_DATA).hex()
 
-        resp1 = await self.client.request(
-            "POST", "/submit-job", json={"tx": tx_hex}
-        )
+        resp1 = await self.client.request("POST", "/submit-job", json={"tx": tx_hex})
         data1 = await resp1.json()
         self.assertEqual(200, resp1.status)
 
-        resp2 = await self.client.request(
-            "POST", "/submit-job", json={"tx": tx_hex}
-        )
+        resp2 = await self.client.request("POST", "/submit-job", json={"tx": tx_hex})
         data2 = await resp2.json()
         self.assertEqual(200, resp2.status)
 
@@ -331,8 +325,9 @@ class TestBlockMinerInterval(AioHTTPTestCase):
         while len(timestamps) < num_blocks and _time.monotonic() < deadline:
             await asyncio.sleep(0.02)
 
-    def _assert_regular_intervals(self, timestamps, num_blocks, block_interval_ms,
-                                  tolerance_pct=0.40):
+    def _assert_regular_intervals(
+        self, timestamps, num_blocks, block_interval_ms, tolerance_pct=0.40
+    ):
         """Assert that block-to-block intervals are within tolerance of the target."""
         self.assertGreaterEqual(
             len(timestamps),
@@ -341,8 +336,7 @@ class TestBlockMinerInterval(AioHTTPTestCase):
         )
 
         intervals_ms = [
-            (timestamps[i + 1] - timestamps[i]) * 1000
-            for i in range(num_blocks - 1)
+            (timestamps[i + 1] - timestamps[i]) * 1000 for i in range(num_blocks - 1)
         ]
         tolerance_ms = block_interval_ms * tolerance_pct
 
@@ -369,9 +363,7 @@ class TestBlockMinerInterval(AioHTTPTestCase):
         miner = self._make_miner(block_interval_ms, timestamps)
 
         # Mock solve_block to return immediately (simulates weight ~1).
-        with patch(
-            "txstratum.dev.block_miner.solve_block", return_value=True
-        ):
+        with patch("txstratum.dev.block_miner.solve_block", return_value=True):
             await miner.start()
             await self._wait_for_blocks(timestamps, num_blocks)
             await miner.stop()

@@ -77,6 +77,10 @@ class BlockMiner:
         block_interval_ms: int = 1000,
     ):
         """Initialize the block miner."""
+        if block_interval_ms <= 0:
+            raise ValueError(
+                f"block_interval_ms must be positive, got {block_interval_ms}"
+            )
         self.log = logger.new()
         self.backend = backend
         self.address = address

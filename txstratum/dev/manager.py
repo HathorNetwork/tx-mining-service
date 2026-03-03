@@ -27,7 +27,6 @@ needed is in cli.py to instantiate DevMiningManager instead of TxMiningManager.
 import asyncio
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from hathorlib.exceptions import PushTxFailed
 from structlog import get_logger
 
 import txstratum.time
@@ -62,7 +61,7 @@ class DevMiningManager:
         self.backend = backend
         self.started_at: float = 0
         self.tx_jobs: Dict[bytes, TxJob] = {}
-        self._tasks: set[asyncio.Task] = set()
+        self._tasks: Dict[bytes, asyncio.Task] = {}
         self.refuse_new_jobs = False
 
         # Statistics — same fields as TxMiningManager for API compatibility.
@@ -77,9 +76,9 @@ class DevMiningManager:
 
     async def stop(self) -> None:
         """Stop the manager."""
-        for task in self._tasks:
+        for task in self._tasks.values():
             task.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await asyncio.gather(*self._tasks.values(), return_exceptions=True)
         self._tasks.clear()
         self.log.info("DevMiningManager stopped")
 
@@ -153,8 +152,8 @@ class DevMiningManager:
             task = asyncio.create_task(self._mine_with_parents(job))
         else:
             task = asyncio.create_task(self._mine_job(job))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tasks[job.uuid] = task
+        task.add_done_callback(lambda _: self._tasks.pop(job.uuid, None))
 
         return True
 
@@ -212,8 +211,10 @@ class DevMiningManager:
         if job.propagate:
             try:
                 await self.backend.push_tx_or_block(bytes(tx))
-            except PushTxFailed:
-                job.mark_as_failed("Fullnode rejected transaction")
+            except Exception as e:
+                job.mark_as_failed(
+                    f"Fullnode rejected transaction ({type(e).__name__}): {e}"
+                )
                 self.txs_failed += 1
                 self._schedule_cleanup(job)
                 return
@@ -235,6 +236,9 @@ class DevMiningManager:
         """Cancel tx mining job."""
         if job.status in JobStatus.get_after_mining_states():
             raise ValueError("Job has already finished")
+        task = self._tasks.pop(job.uuid, None)
+        if task is not None:
+            task.cancel()
         job.status = JobStatus.CANCELLED
         self.tx_jobs.pop(job.uuid)
         self.log.info("TxJob cancelled", job_id=job.uuid.hex())
