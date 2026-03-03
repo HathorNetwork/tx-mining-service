@@ -466,9 +466,7 @@ class RunDevService:
 
         self.register_signal_handlers()
 
-        logger.info(
-            "TxMining API running at 0.0.0.0:{}...".format(self.args.api_port)
-        )
+        logger.info("TxMining API running at 0.0.0.0:{}...".format(self.args.api_port))
         self.loop.run_forever()
 
     # Signal handling methods are intentionally duplicated from RunService to
