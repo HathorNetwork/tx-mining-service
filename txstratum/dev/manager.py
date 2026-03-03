@@ -62,6 +62,7 @@ class DevMiningManager:
         self.backend = backend
         self.started_at: float = 0
         self.tx_jobs: Dict[bytes, TxJob] = {}
+        self._tasks: set[asyncio.Task] = set()
         self.refuse_new_jobs = False
 
         # Statistics — same fields as TxMiningManager for API compatibility.
@@ -76,6 +77,10 @@ class DevMiningManager:
 
     async def stop(self) -> None:
         """Stop the manager."""
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks.clear()
         self.log.info("DevMiningManager stopped")
 
     @property
@@ -145,9 +150,11 @@ class DevMiningManager:
         # Kick off mining as an async task. If the job needs parents (i.e. the
         # caller sent add_parents=True), we fetch them from the fullnode first.
         if job.add_parents:
-            asyncio.ensure_future(self._mine_with_parents(job))
+            task = asyncio.create_task(self._mine_with_parents(job))
         else:
-            asyncio.ensure_future(self._mine_job(job))
+            task = asyncio.create_task(self._mine_job(job))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
         return True
 
