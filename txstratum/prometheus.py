@@ -1,5 +1,6 @@
 import asyncio
 import os
+from contextlib import suppress
 from typing import TYPE_CHECKING, Dict, NamedTuple, Union, cast
 
 from prometheus_client import (  # type: ignore[import]
@@ -242,13 +243,26 @@ class BasePrometheusExporter:
     async def _handle_protocol_miner_disconnected(
         self, protocol: StratumProtocol
     ) -> None:
-        METRICS_PUBSUB["miner_up"].labels(
-            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
-        ).set(0)
-        # Reset rtt value
-        self.metric_gauges[RTT_METRIC_NAME].labels(
-            miner_address=protocol.miner_address_str, miner_id=protocol.miner_id
-        ).set(0)
+        # Remove label series entirely so stale miner_id labels don't accumulate
+        # after reconnects (each reconnect generates a new miner_id).
+        # suppress(KeyError) guards against metrics that were never initialised
+        # for this miner (e.g. Counters that were never incremented).
+        with suppress(KeyError):
+            METRICS_PUBSUB["miner_up"].remove(
+                protocol.miner_address_str, protocol.miner_id
+            )
+        with suppress(KeyError):
+            METRICS_PUBSUB["txs_solved"].remove(
+                protocol.miner_type, protocol.miner_address_str, protocol.miner_id
+            )
+        with suppress(KeyError):
+            METRICS_PUBSUB["miner_completed_jobs"].remove(
+                protocol.miner_type, protocol.miner_address_str, protocol.miner_id
+            )
+        with suppress(KeyError):
+            self.metric_gauges[RTT_METRIC_NAME].remove(
+                protocol.miner_address_str, protocol.miner_id
+            )
 
 
 class PrometheusExporter(BasePrometheusExporter):
