@@ -21,7 +21,7 @@ from txstratum.middleware import create_middleware_version_check
 
 if TYPE_CHECKING:
     from txstratum.filters import TXFilter
-    from txstratum.manager import TxMiningManager
+    from txstratum.protocols import MiningManager
 
 
 # Default maximum txout script size (in bytes).
@@ -45,7 +45,7 @@ class App:
 
     def __init__(
         self,
-        manager: "TxMiningManager",
+        manager: "MiningManager",
         health_check: "HealthCheck",
         *,
         max_tx_weight: Optional[float] = None,

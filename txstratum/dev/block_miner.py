@@ -1,0 +1,200 @@
+# Copyright (c) Hathor Labs and its affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+"""Background block miner for dev/test environments.
+
+In production, blocks are mined by cpuminer connecting to the stratum server:
+
+    fullnode ──stratum──▶ tx-mining-service ◀──stratum──── cpuminer
+
+cpuminer has no concept of "block interval" — it mines as fast as it can. This
+produces irregular block spacing, which causes test flakiness (e.g. reward locks
+releasing at unpredictable times, confirmations accumulating at uneven rates).
+
+This module replaces cpuminer with an in-process loop that:
+  1. Polls the fullnode for block templates (via get_block_template)
+  2. Solves the PoW by brute-forcing nonces (offloaded to a thread executor)
+  3. Submits the solved block back to the fullnode (via push_tx_or_block)
+  4. Sleeps for the *remaining* interval time to maintain a steady cadence
+
+Step 4 is key: if solving takes T seconds and the configured interval is I
+seconds, the loop sleeps max(0, I - T). This keeps block-to-block time close
+to the configured interval even when PoW isn't trivial.
+
+Combined with --test-mode-block-weight on the fullnode (which reduces block
+weight to 1, bypassing the full DAA computation), solving typically succeeds
+on the first nonce — so blocks are produced at an almost exactly regular pace.
+"""
+
+import asyncio
+from typing import TYPE_CHECKING, Optional
+
+from aiohttp import ClientError
+from hathorlib import Block
+from hathorlib.exceptions import PushTxFailed
+from structlog import get_logger
+
+import txstratum.time
+from txstratum.dev import MAX_NONCE
+
+if TYPE_CHECKING:
+    from hathorlib.client import HathorClient
+
+logger = get_logger()
+
+
+def solve_block(block: Block) -> bool:
+    """Solve PoW for a block by iterating nonces.
+
+    This is a blocking function — called via run_in_executor in the mining loop
+    to avoid blocking the async event loop.
+
+    Returns True if a valid nonce was found, False otherwise.
+    """
+    for nonce in range(MAX_NONCE):
+        block.nonce = nonce
+        block.update_hash()
+        if block.verify_pow():
+            return True
+    return False
+
+
+class BlockMiner:
+    """Background block miner that replaces cpuminer + stratum for dev/test.
+
+    Key differences from the production mining path:
+    - No stratum protocol — communicates directly with the fullnode via HTTP
+    - Configurable block interval — produces blocks at a steady cadence
+    - Single-threaded — no pool of miners, just one solve loop
+    """
+
+    def __init__(
+        self,
+        backend: "HathorClient",
+        address: Optional[str] = None,
+        block_interval_ms: int = 1000,
+    ):
+        """Initialize the block miner."""
+        if block_interval_ms <= 0:
+            raise ValueError(
+                f"block_interval_ms must be positive, got {block_interval_ms}"
+            )
+        self.log = logger.new()
+        self.backend = backend
+        self.address = address
+        self.block_interval_s = block_interval_ms / 1000.0
+        self.blocks_found = 0
+        self._running = False
+        self._task: Optional[asyncio.Task[None]] = None
+
+    async def start(self) -> None:
+        """Start the block mining loop."""
+        if self._running:
+            return
+        self._running = True
+        self._task = asyncio.ensure_future(self._run())
+        self.log.info(
+            "Block miner started",
+            address=self.address,
+            block_interval_ms=int(self.block_interval_s * 1000),
+        )
+
+    async def stop(self) -> None:
+        """Stop the block mining loop."""
+        if not self._running:
+            return
+        self._running = False
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+        self.log.info("Block miner stopped", blocks_found=self.blocks_found)
+
+    async def _wait_for_fullnode(self) -> None:
+        """Wait until the fullnode is ready to serve block templates.
+
+        We use get_block_template (not the /health endpoint) because the
+        fullnode may report healthy before it's actually ready to produce
+        block templates. This was a source of startup race conditions.
+        """
+        while self._running:
+            try:
+                await self.backend.get_block_template(address=self.address)
+                self.log.info("Fullnode is ready")
+                return
+            except (ClientError, OSError, RuntimeError):
+                self.log.info("Waiting for fullnode to become available...")
+            await asyncio.sleep(1)
+
+    async def _run(self) -> None:
+        """Run the main mining loop.
+
+        The timing compensation logic (sleep for interval minus elapsed time)
+        ensures that blocks are produced at a steady cadence regardless of how
+        long the PoW solve takes. See tests/test_dev_miner.py for validation
+        of this behavior with both trivial and slow mining.
+        """
+        await self._wait_for_fullnode()
+
+        while self._running:
+            cycle_start = txstratum.time.time()
+
+            try:
+                await self._mine_one_block()
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                self.log.exception("Error in block mining loop")
+                await asyncio.sleep(1)
+                continue
+
+            # Timing compensation: sleep only the remaining time after solving,
+            # so block-to-block interval stays close to the configured value.
+            elapsed = txstratum.time.time() - cycle_start
+            remaining = self.block_interval_s - elapsed
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+
+    async def _mine_one_block(self) -> None:
+        """Fetch a block template, solve it, and submit it.
+
+        The PoW solve is offloaded to a thread executor because even though
+        it's trivial with --test-mode-block-weight, it's still CPU-bound work
+        that would block the event loop (and delay tx mining).
+        """
+        start = txstratum.time.time()
+
+        template = await self.backend.get_block_template(address=self.address)
+        block = Block.create_from_struct(template.data)
+
+        loop = asyncio.get_event_loop()
+        solved = await loop.run_in_executor(None, solve_block, block)
+        if not solved:
+            self.log.error("Failed to solve block", height=template.height)
+            return
+
+        elapsed_ms = (txstratum.time.time() - start) * 1000
+
+        try:
+            await self.backend.push_tx_or_block(bytes(block))
+        except PushTxFailed:
+            self.log.exception(
+                "Block rejected by fullnode",
+                height=template.height,
+                hash=block.hash_hex,
+            )
+            return
+
+        self.blocks_found += 1
+        self.log.info(
+            "Block mined",
+            height=template.height,
+            hash=block.hash_hex,
+            weight=block.weight,
+            nonce=block.nonce,
+            time_ms=f"{elapsed_ms:.1f}",
+        )
