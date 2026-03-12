@@ -91,6 +91,8 @@ class BlockMiner:
 
     async def start(self) -> None:
         """Start the block mining loop."""
+        if self._running:
+            return
         self._running = True
         self._task = asyncio.ensure_future(self._run())
         self.log.info(
@@ -101,6 +103,8 @@ class BlockMiner:
 
     async def stop(self) -> None:
         """Stop the block mining loop."""
+        if not self._running:
+            return
         self._running = False
         if self._task is not None:
             self._task.cancel()

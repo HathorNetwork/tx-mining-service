@@ -71,11 +71,15 @@ class DevMiningManager:
 
     async def start(self) -> None:
         """Start the manager."""
+        if self.started_at:
+            return
         self.started_at = txstratum.time.time()
         self.log.info("DevMiningManager started")
 
     async def stop(self) -> None:
         """Stop the manager."""
+        if not self.started_at:
+            return
         for task in self._tasks.values():
             task.cancel()
         await asyncio.gather(*self._tasks.values(), return_exceptions=True)
