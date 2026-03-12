@@ -84,6 +84,7 @@ class DevMiningManager:
             task.cancel()
         await asyncio.gather(*self._tasks.values(), return_exceptions=True)
         self._tasks.clear()
+        self.started_at = 0
         self.log.info("DevMiningManager stopped")
 
     @property
