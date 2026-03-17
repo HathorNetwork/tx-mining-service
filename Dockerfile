@@ -15,10 +15,16 @@ RUN poetry config virtualenvs.create false \
 
 FROM python:3.9-alpine
 
+RUN addgroup -g 10001 appuser && adduser -u 10001 -G appuser -D -h /app appuser
+
+WORKDIR /app
+
 COPY --from=build /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
 RUN apk add libgcc
 
-COPY txstratum/ ./txstratum
-COPY main.py log.conf ./
+COPY --chown=appuser:appuser txstratum/ ./txstratum
+COPY --chown=appuser:appuser main.py log.conf ./
+
+USER appuser
 
 ENTRYPOINT ["python", "-m", "main"]
