@@ -23,7 +23,8 @@ base58 = "~2.1.1"
 structlog = "~22.3.0"
 prometheus-client = "^0.9.0"
 idna_ssl = "^1.1.0"
-setuptools = ">=68.0,<71"
+# Cap required: setuptools >=82 removed pkg_resources, which is used by pycoin (a transitive dep via hathorlib)
+setuptools = ">=68.0,<82"
 hathorlib = {version = "^0.14.1", extras = ["client"]}
 python-healthchecklib = "^0.1.0"
 
