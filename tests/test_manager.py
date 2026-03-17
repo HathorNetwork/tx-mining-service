@@ -972,18 +972,20 @@ class ManagerClockedTestCase(ClockedTestCase):
         self.assertTrue(True, job.is_block)
 
         job.update_timestamp(force=True)
-        self.assertEqual(int(txstratum.time.time()), job._block.timestamp)
+        ts_before = int(txstratum.time.time())
+        self.assertEqual(ts_before, job._block.timestamp)
 
-        # Update timestamp.
+        # Update timestamp — should reflect the 10s advance.
         await self.advance(10)
         job.update_timestamp()
-        self.assertEqual(int(txstratum.time.time()), job._block.timestamp)
+        ts_after = int(txstratum.time.time())
+        self.assertEqual(ts_before + 10, ts_after)
+        self.assertEqual(ts_after, job._block.timestamp)
 
-        # Do not update timestamp.
-        old_ts = txstratum.time.time()
+        # Do not update timestamp (advance beyond threshold).
         await self.advance(40)
         job.update_timestamp()
-        self.assertEqual(int(old_ts), job._block.timestamp)
+        self.assertEqual(ts_after, job._block.timestamp)
 
     async def test_tx_resubmit(self):
         job1 = TxJob(TX1_DATA, timeout=10)
