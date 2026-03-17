@@ -294,19 +294,24 @@ class MaxSizeOrderedDict(OrderedDict, Generic[KT, VT]):  # type: ignore
     >>> foo[4] = 'd'
     >>> foo[5] = 'e'
     >>> foo
-    MaxSizeOrderedDict({1: 'a', 2: 'b', 3: 'c', 4: 'd', 5: 'e'})
+    MaxSizeOrderedDict([(1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e')])
     >>> foo[6] = 'f'
     >>> foo
-    MaxSizeOrderedDict({2: 'b', 3: 'c', 4: 'd', 5: 'e', 6: 'f'})
+    MaxSizeOrderedDict([(2, 'b'), (3, 'c'), (4, 'd'), (5, 'e'), (6, 'f')])
     >>> foo[7] = 'g'
     >>> foo
-    MaxSizeOrderedDict({3: 'c', 4: 'd', 5: 'e', 6: 'f', 7: 'g'})
+    MaxSizeOrderedDict([(3, 'c'), (4, 'd'), (5, 'e'), (6, 'f'), (7, 'g')])
     """
 
     def __init__(self, *args: Any, max: int = 0, **kwargs: VT):
         """Init MaxSizeOrderedDict with max number of elements."""
         self._max: int = max
         super().__init__(*args, **kwargs)
+
+    def __repr__(self) -> str:
+        """Return a consistent repr across Python versions."""
+        items = list(self.items())
+        return f'{self.__class__.__name__}({items})'
 
     def __setitem__(self, key: KT, value: VT) -> None:
         """Add a new element to the dict."""
