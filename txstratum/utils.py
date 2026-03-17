@@ -311,7 +311,7 @@ class MaxSizeOrderedDict(OrderedDict, Generic[KT, VT]):  # type: ignore
     def __repr__(self) -> str:
         """Return a consistent repr across Python versions."""
         items = list(self.items())
-        return f'{self.__class__.__name__}({items})'
+        return f"{self.__class__.__name__}({items})"
 
     def __setitem__(self, key: KT, value: VT) -> None:
         """Add a new element to the dict."""

@@ -67,5 +67,11 @@ class ClockedTestCase(unittest.IsolatedAsyncioTestCase):
         self.loop._test_clock_offset += seconds  # type: ignore[attr-defined]
         # Yield to the event loop repeatedly so that any asyncio.sleep() or
         # call_later() callbacks whose scheduled time has now passed get executed.
-        for _ in range(100):
+        for _ in range(1000):
             await asyncio.sleep(0)
+            ready = bool(getattr(self.loop, "_ready", ()))
+            scheduled = getattr(self.loop, "_scheduled", ())
+            if not ready and (not scheduled or scheduled[0]._when > self.loop.time()):
+                break
+        else:
+            raise AssertionError("advance() did not drain due callbacks")

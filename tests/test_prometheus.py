@@ -59,10 +59,10 @@ class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
         async def _fn():
             self.ran_all = True
 
-        asyncio.ensure_future(_fn())
+        asyncio.create_task(_fn())
 
         while getattr(self, "ran_all", False) is False:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0)
 
         self.ran_all = False
 
