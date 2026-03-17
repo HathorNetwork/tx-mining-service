@@ -11,12 +11,12 @@ from collections import deque
 from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
-import asynctest  # type: ignore
 import pytest
 from hathorlib.client import BlockTemplate, HathorClient
 from hathorlib.exceptions import PushTxFailed
 
 import txstratum.time
+from tests.utils import ClockedTestCase
 from txstratum.exceptions import JobAlreadyExists
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.manager import TxMiningManager
@@ -932,8 +932,9 @@ class ManagerTestCase(unittest.TestCase):
         self.assertEqual(tx_job.status, JobStatus.FAILED)
 
 
-class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
-    def setUp(self):
+class ManagerClockedTestCase(ClockedTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
         address = "HC7w4j7mPet49BBN5a2An3XUiPvK6C1TL7"
 
         from tests.utils import Clock
@@ -942,12 +943,12 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         self.clock.enable()
 
         self.client = HathorClientTest(server_url="")
-        self.loop.run_until_complete(self.client.start())
+        await self.client.start()
         self.manager = TxMiningManager(
             backend=self.client, pubsub=MagicMock(), address=address
         )
-        self.loop.run_until_complete(self.manager.start())
-        self.loop.run_until_complete(self.manager.wait_for_block_template())
+        await self.manager.start()
+        await self.manager.wait_for_block_template()
         self.assertTrue(len(self.manager.block_template) > 0)
 
     def tearDown(self):

@@ -8,8 +8,7 @@ import asyncio
 import os
 import shutil
 import tempfile
-
-import asynctest  # type: ignore[import]
+import unittest
 
 from txstratum.jobs import TxJob
 from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
@@ -44,9 +43,9 @@ class TxMiningManagerMock:
         return 1.23
 
 
-class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
-    def setUp(self):
-        self.pubsub = PubSubManager(self.loop)
+class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.pubsub = PubSubManager(asyncio.get_running_loop())
         self.manager = TxMiningManagerMock()
         self.tmpdir = tempfile.mkdtemp()
 
@@ -56,12 +55,10 @@ class ManagerTestCase(asynctest.TestCase):  # type: ignore[misc]
 
     async def _run_all_pending_events(self):
         """Run all pending events."""
-        # pending = asyncio.all_tasks(self.loop)
-        # self.loop.run_until_complete(asyncio.gather(*pending))
         async def _fn():
             self.ran_all = True
 
-        self.loop.create_task(_fn())
+        asyncio.ensure_future(_fn())
 
         while getattr(self, "ran_all", False) is False:
             await asyncio.sleep(0.1)

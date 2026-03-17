@@ -4,27 +4,16 @@ Copyright (c) Hathor Labs and its affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+import unittest
 from typing import List
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
-import asynctest  # type: ignore
 from hathorlib.scripts import P2PKH
 from hathorlib.transaction import Transaction, TxInput, TxOutput
 from hathorlib.utils import decode_address
 
 from txstratum.filters import FileFilter, TOIFilter
 from txstratum.toi_client import CheckBlacklist, TOIError
-
-
-class AsyncMock(MagicMock):  # type: ignore
-    """MagicMock for async functions.
-
-    The native unittest.mock.AsyncMock is not being used
-    because it was added on python 3.8 and we have to support versions 3.6 and 3.7
-    """
-
-    async def __call__(self, *args, **kwargs):
-        return super().__call__(*args, **kwargs)
 
 
 def create_tx_from(inputs: List[TxInput], outputs: List[TxOutput]) -> Transaction:
@@ -67,7 +56,7 @@ def create_tx_with(
     return create_tx_from(inputs, outputs)
 
 
-class FiltersTestCase(asynctest.ClockedTestCase):  # type: ignore
+class FiltersTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_file_filter_address(self):
         fail_address = "HTQMV7gbUsJeADqTB9tTt6qin5VJcKy6Kb"
         ok_address = "H9ZVe52vMVbGBXCSEXCS9tZ5YEY3tUk1CL"

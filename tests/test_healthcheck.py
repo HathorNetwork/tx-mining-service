@@ -1,6 +1,6 @@
+import unittest
 from unittest.mock import MagicMock
 
-import asynctest  # type: ignore[import]
 from healthcheck import HealthcheckStatus
 
 from txstratum.healthcheck.healthcheck import (
@@ -17,7 +17,7 @@ class HathorClientMock:
         return {"status": "pass"}
 
 
-class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
+class TestFullnodeHealthCheck(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_hathor_client = MagicMock()
         self.fullnode_health_check = FullnodeHealthCheck(
@@ -75,7 +75,7 @@ class TestFullnodeHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         self.assertEqual(result.output, "Fullnode is not healthy: {'status': 'fail'}")
 
 
-class TestMiningHealthCheck(asynctest.TestCase):  # type: ignore[misc]
+class TestMiningHealthCheck(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.manager = MagicMock()
         self.mining_health_check = MiningHealthCheck(manager=self.manager)
@@ -173,7 +173,7 @@ class TestMiningHealthCheck(asynctest.TestCase):  # type: ignore[misc]
         )
 
 
-class TestHealthCheck(asynctest.TestCase):  # type: ignore[misc]
+class TestHealthCheck(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
 
         self.mock_hathor_client = HathorClientMock()
