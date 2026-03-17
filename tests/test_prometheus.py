@@ -55,6 +55,7 @@ class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def _run_all_pending_events(self):
         """Run all pending events."""
+
         async def _fn():
             self.ran_all = True
 

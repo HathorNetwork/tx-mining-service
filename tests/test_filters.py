@@ -6,7 +6,7 @@ LICENSE file in the root directory of this source tree.
 """
 import unittest
 from typing import List
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 from hathorlib.scripts import P2PKH
 from hathorlib.transaction import Transaction, TxInput, TxOutput

@@ -6,9 +6,8 @@ LICENSE file in the root directory of this source tree.
 """
 import time
 
-from tests.utils import ClockedTestCase
-
 import txstratum.time
+from tests.utils import ClockedTestCase
 
 
 class TimeTestCase(ClockedTestCase):

@@ -21,14 +21,16 @@ class Clock:
         self.ref_time = txstratum.time.time()
         # If inside a ClockedTestCase, record the current synthetic offset
         # so that time() is derived purely from advance() calls (no real-time drift).
-        self._initial_offset: Optional[float] = getattr(loop, "_test_clock_offset", None)
+        self._initial_offset: Optional[float] = getattr(
+            loop, "_test_clock_offset", None
+        )
 
     def time(self) -> float:
         current_offset = getattr(self.loop, "_test_clock_offset", None)
         if current_offset is not None and self._initial_offset is not None:
-            return self.ref_time + (current_offset - self._initial_offset)
+            return float(self.ref_time + (current_offset - self._initial_offset))
         # Fallback for non-test usage
-        return self.ref_time + self.loop.time()
+        return float(self.ref_time + self.loop.time())
 
     def enable(self) -> None:
         txstratum.time.set_time_function(self.time)
@@ -55,7 +57,7 @@ class ClockedTestCase(unittest.IsolatedAsyncioTestCase):
         loop_ref = self.loop
 
         def _fake_time() -> float:
-            return _real_time() + loop_ref._test_clock_offset  # type: ignore[attr-defined]
+            return float(_real_time() + loop_ref._test_clock_offset)  # type: ignore[attr-defined]
 
         # Shadow the loop's time() on the instance so internal scheduling uses it.
         self.loop.time = _fake_time  # type: ignore[method-assign]
