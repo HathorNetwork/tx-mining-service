@@ -11,12 +11,12 @@ from collections import deque
 from typing import List, Optional
 from unittest.mock import ANY, MagicMock, Mock
 
-import asynctest  # type: ignore
 import pytest
 from hathorlib.client import BlockTemplate, HathorClient
 from hathorlib.exceptions import PushTxFailed
 
 import txstratum.time
+from tests.utils import ClockedTestCase
 from txstratum.exceptions import JobAlreadyExists
 from txstratum.jobs import JobStatus, TxJob
 from txstratum.manager import TxMiningManager
@@ -932,8 +932,9 @@ class ManagerTestCase(unittest.TestCase):
         self.assertEqual(tx_job.status, JobStatus.FAILED)
 
 
-class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
-    def setUp(self):
+class ManagerClockedTestCase(ClockedTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
         address = "HC7w4j7mPet49BBN5a2An3XUiPvK6C1TL7"
 
         from tests.utils import Clock
@@ -942,12 +943,12 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         self.clock.enable()
 
         self.client = HathorClientTest(server_url="")
-        self.loop.run_until_complete(self.client.start())
+        await self.client.start()
         self.manager = TxMiningManager(
             backend=self.client, pubsub=MagicMock(), address=address
         )
-        self.loop.run_until_complete(self.manager.start())
-        self.loop.run_until_complete(self.manager.wait_for_block_template())
+        await self.manager.start()
+        await self.manager.wait_for_block_template()
         self.assertTrue(len(self.manager.block_template) > 0)
 
     def tearDown(self):
@@ -971,18 +972,20 @@ class ManagerClockedTestCase(asynctest.ClockedTestCase):  # type: ignore
         self.assertTrue(True, job.is_block)
 
         job.update_timestamp(force=True)
-        self.assertEqual(int(txstratum.time.time()), job._block.timestamp)
+        ts_before = int(txstratum.time.time())
+        self.assertEqual(ts_before, job._block.timestamp)
 
-        # Update timestamp.
+        # Update timestamp — should reflect the 10s advance.
         await self.advance(10)
         job.update_timestamp()
-        self.assertEqual(int(txstratum.time.time()), job._block.timestamp)
+        ts_after = int(txstratum.time.time())
+        self.assertEqual(ts_before + 10, ts_after)
+        self.assertEqual(ts_after, job._block.timestamp)
 
-        # Do not update timestamp.
-        old_ts = txstratum.time.time()
+        # Do not update timestamp (advance beyond threshold).
         await self.advance(40)
         job.update_timestamp()
-        self.assertEqual(int(old_ts), job._block.timestamp)
+        self.assertEqual(ts_after, job._block.timestamp)
 
     async def test_tx_resubmit(self):
         job1 = TxJob(TX1_DATA, timeout=10)

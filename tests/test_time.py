@@ -6,12 +6,11 @@ LICENSE file in the root directory of this source tree.
 """
 import time
 
-import asynctest  # type: ignore
-
 import txstratum.time
+from tests.utils import ClockedTestCase
 
 
-class TimeTestCase(asynctest.ClockedTestCase):  # type: ignore
+class TimeTestCase(ClockedTestCase):
     async def test_system_clock_time(self):
         t1 = time.time()
         t2 = txstratum.time.time()
