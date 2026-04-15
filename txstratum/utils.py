@@ -308,6 +308,11 @@ class MaxSizeOrderedDict(OrderedDict, Generic[KT, VT]):  # type: ignore
         self._max: int = max
         super().__init__(*args, **kwargs)
 
+    def __repr__(self) -> str:
+        """Return a consistent repr across Python versions."""
+        items = list(self.items())
+        return f"{self.__class__.__name__}({items})"
+
     def __setitem__(self, key: KT, value: VT) -> None:
         """Add a new element to the dict."""
         OrderedDict.__setitem__(self, key, value)  # type: ignore[assignment]

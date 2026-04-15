@@ -514,8 +514,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.testnet:
-        if not os.environ.get("TXMINING_CONFIG_FILE"):
-            os.environ["TXMINING_CONFIG_FILE"] = "hathorlib.conf.testnet"
+        if not os.environ.get("HATHOR_CONFIG_FILE"):
+            os.environ["HATHOR_CONFIG_FILE"] = "hathorlib.conf.testnet"
 
     # Route to the appropriate service runner based on --dev-miner flag.
     # Both runners expose the same HTTP API; they differ only in how they

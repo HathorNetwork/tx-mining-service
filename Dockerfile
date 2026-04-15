@@ -1,4 +1,4 @@
-FROM python:3.9-alpine AS build
+FROM python:3.11-alpine AS build
 
 WORKDIR /code
 
@@ -13,13 +13,13 @@ COPY poetry.lock pyproject.toml /code/
 RUN poetry config virtualenvs.create false \
   && poetry install --only main --no-interaction --no-ansi
 
-FROM python:3.9-alpine
+FROM python:3.11-alpine
 
 RUN addgroup -g 10001 appuser && adduser -u 10001 -G appuser -D -h /app appuser
 
 WORKDIR /app
 
-COPY --from=build /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 RUN apk add libgcc
 
 COPY --chown=appuser:appuser txstratum/ ./txstratum
