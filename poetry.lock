@@ -616,7 +616,7 @@ files = [
 
 [[package]]
 name = "hathorlib"
-version = "0.14.0"
+version = "0.14.1"
 description = "Hathor Network base objects library"
 optional = false
 python-versions = ">=3.9,<4"
@@ -638,7 +638,7 @@ client = ["aiohttp (>=3.9.3,<3.10.0)", "structlog (>=22.3.0,<22.4.0)"]
 
 [package.source]
 type = "directory"
-url = "../hathor-core/hathorlib"
+url = "../hathor-core-4/hathorlib"
 
 [[package]]
 name = "idna"
@@ -1465,4 +1465,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "cfb73eec5eb83903fb25e89696112f949b02f105e1f88f4efa0131bf4b2442fe"
+content-hash = "63e3481d130e4979fbda00b49b99402dbe3320022be723c163904882fa96a914"

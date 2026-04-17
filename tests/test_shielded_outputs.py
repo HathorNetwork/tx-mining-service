@@ -86,16 +86,25 @@ def _make_full_shielded_output() -> FullShieldedOutput:
     )
 
 
-def _build_tx_with_shielded_outputs(shielded_outputs: list) -> bytes:
+def _build_tx_with_shielded_outputs(
+    shielded_outputs: list,
+    transparent_output_value: int | None = None,
+) -> bytes:
     """Build a serialized transaction with shielded outputs appended as a header.
 
     Takes the base transaction bytes and appends a ShieldedOutputsHeader.
+    If transparent_output_value is given, the first transparent output's value
+    is overwritten with it (useful for testing large amounts, which trigger
+    the 4-byte -> 8-byte output-value encoding switch at 2**31).
     """
     tx = tx_or_block_from_bytes(BASE_TX_DATA)
     assert isinstance(tx, Transaction)
 
     # Update timestamp to current time
     tx.timestamp = int(txstratum.time.time())
+
+    if transparent_output_value is not None:
+        tx.outputs[0].value = transparent_output_value
 
     # Build the shielded outputs header manually by constructing the header
     # and attaching it to the transaction.
@@ -524,3 +533,182 @@ class TestTxJobShielded(unittest.TestCase):
         self.assertEqual(job.get_tx().parents, new_parents)
         # The shielded header should still be present
         self.assertTrue(job.get_tx().has_shielded_outputs())
+
+
+# ---------------------------------------------------------------------------
+# Large transparent amounts combined with shielded outputs
+# ---------------------------------------------------------------------------
+
+# _MAX_OUTPUT_VALUE_32 = 2**31 - 1 is the threshold where output-value encoding
+# switches from 4 bytes (signed int32) to 8 bytes (stored as -value in int64).
+# MAX_OUTPUT_VALUE = 2**63 is the absolute cap.
+SMALL_AMOUNT_4B = 100_000_000               # 100 million, still 4-byte
+BOUNDARY_4B = 2**31 - 1                     # largest 4-byte value
+JUST_OVER_4B = 2**31                        # first value forced into 8 bytes
+BIG_AMOUNT_8B = 100_000_000_000             # 100 billion, needs 8 bytes
+HUGE_AMOUNT_8B = 100_000_000_000_000        # 100 trillion
+NEAR_MAX_AMOUNT = 2**62                     # well into 8-byte range
+MAX_AMOUNT = 2**63                          # absolute max permitted
+
+
+class TestShieldedTxLargeAmounts(unittest.TestCase):
+    """Shielded outputs must coexist with transparent outputs of any legal size.
+
+    The 4B -> 8B output-value encoding switch at 2**31 is the main thing we're
+    stressing: serialization length changes, but parsing + mining must still
+    work when a ShieldedOutputsHeader is appended.
+    """
+
+    __test__ = True
+
+    def _roundtrip_with_amount(self, amount: int) -> Transaction:
+        outputs = [_make_amount_shielded_output()]
+        tx_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=amount
+        )
+        tx = tx_or_block_from_bytes(tx_bytes)
+        self.assertIsInstance(tx, Transaction)
+        self.assertEqual(tx.outputs[0].value, amount)
+        self.assertTrue(tx.has_shielded_outputs())
+        # Bytes round-trip cleanly
+        self.assertEqual(tx_bytes, bytes(tx))
+        return tx
+
+    def test_roundtrip_100_million(self):
+        """100M (4-byte encoding) survives round-trip with a shielded output."""
+        self._roundtrip_with_amount(SMALL_AMOUNT_4B)
+
+    def test_roundtrip_boundary_4byte(self):
+        """2**31 - 1 (largest 4-byte value) survives round-trip."""
+        self._roundtrip_with_amount(BOUNDARY_4B)
+
+    def test_roundtrip_just_over_4byte(self):
+        """2**31 (first value using 8-byte encoding) survives round-trip."""
+        self._roundtrip_with_amount(JUST_OVER_4B)
+
+    def test_roundtrip_100_billion(self):
+        """100B (8-byte encoding) survives round-trip with a shielded output."""
+        self._roundtrip_with_amount(BIG_AMOUNT_8B)
+
+    def test_roundtrip_100_trillion(self):
+        """100T survives round-trip with a shielded output."""
+        self._roundtrip_with_amount(HUGE_AMOUNT_8B)
+
+    def test_roundtrip_near_max(self):
+        """2**62 survives round-trip with a shielded output."""
+        self._roundtrip_with_amount(NEAR_MAX_AMOUNT)
+
+    def test_roundtrip_max_amount(self):
+        """MAX_OUTPUT_VALUE (2**63) survives round-trip with a shielded output."""
+        self._roundtrip_with_amount(MAX_AMOUNT)
+
+    def test_serialized_length_changes_across_4byte_boundary(self):
+        """Bytes at 2**31 are exactly 4 longer than at 2**31 - 1.
+
+        Sanity check that we're actually hitting the 4B->8B encoding switch.
+        """
+        outputs = [_make_amount_shielded_output()]
+        small_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=BOUNDARY_4B
+        )
+        big_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=JUST_OVER_4B
+        )
+        self.assertEqual(len(big_bytes), len(small_bytes) + 4)
+
+    def test_solve_tx_with_100_billion_amount(self):
+        """PoW solving works when the tx has a large transparent output + shielded."""
+        outputs = [_make_amount_shielded_output(), _make_full_shielded_output()]
+        tx_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=BIG_AMOUNT_8B
+        )
+        tx = tx_or_block_from_bytes(tx_bytes)
+        tx.weight = 1.0
+        self.assertTrue(solve_tx(tx))
+        self.assertTrue(tx.verify_pow())
+        self.assertEqual(tx.outputs[0].value, BIG_AMOUNT_8B)
+        self.assertTrue(tx.has_shielded_outputs())
+
+    def test_solve_tx_with_max_amount(self):
+        """PoW solving works at the absolute max output value."""
+        outputs = [_make_full_shielded_output()]
+        tx_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=MAX_AMOUNT
+        )
+        tx = tx_or_block_from_bytes(tx_bytes)
+        tx.weight = 1.0
+        self.assertTrue(solve_tx(tx))
+        self.assertTrue(tx.verify_pow())
+        self.assertEqual(tx.outputs[0].value, MAX_AMOUNT)
+
+
+class TestDevMinerShieldedLargeAmounts(AioHTTPTestCase):
+    """Mining via the dev-miner HTTP API with large transparent amounts + shielded outputs."""
+
+    __test__ = True
+
+    async def get_application(self):
+        self.backend = MagicMock()
+        self.backend.get_tx_parents = AsyncMock(
+            return_value=[b"\x00" * 32, b"\x01" * 32]
+        )
+        self.backend.push_tx_or_block = AsyncMock(return_value=True)
+        self.manager = DevMiningManager(backend=self.backend)
+        await self.manager.start()
+        self.healthcheck = MagicMock()
+        self.myapp = App(self.manager, self.healthcheck)
+        return self.myapp.app
+
+    async def _submit_and_wait(self, tx_bytes: bytes) -> dict:
+        resp = await self.client.request(
+            "POST", "/submit-job", json={"tx": tx_bytes.hex()}
+        )
+        self.assertEqual(200, resp.status)
+        data = await resp.json()
+        job_id = data["job_id"]
+
+        for _ in range(50):
+            await asyncio.sleep(0.1)
+            resp = await self.client.request(
+                "GET", "/job-status", params={"job-id": job_id}
+            )
+            data = await resp.json()
+            if data["status"] == "done":
+                break
+
+        self.assertEqual("done", data["status"])
+        return {"job_id": job_id, "data": data}
+
+    @unittest_run_loop
+    async def test_submit_tx_100_million(self):
+        outputs = [_make_amount_shielded_output()]
+        tx_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=SMALL_AMOUNT_4B
+        )
+        result = await self._submit_and_wait(tx_bytes)
+        job = self.manager.tx_jobs.get(bytes.fromhex(result["job_id"]))
+        self.assertEqual(job.get_tx().outputs[0].value, SMALL_AMOUNT_4B)
+
+    @unittest_run_loop
+    async def test_submit_tx_100_billion(self):
+        outputs = [_make_amount_shielded_output(), _make_full_shielded_output()]
+        tx_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=BIG_AMOUNT_8B
+        )
+        result = await self._submit_and_wait(tx_bytes)
+        job = self.manager.tx_jobs.get(bytes.fromhex(result["job_id"]))
+        mined = job.get_tx()
+        self.assertEqual(mined.outputs[0].value, BIG_AMOUNT_8B)
+        self.assertTrue(mined.has_shielded_outputs())
+
+    @unittest_run_loop
+    async def test_submit_tx_max_amount(self):
+        outputs = [_make_full_shielded_output()]
+        tx_bytes = _build_tx_with_shielded_outputs(
+            outputs, transparent_output_value=MAX_AMOUNT
+        )
+        result = await self._submit_and_wait(tx_bytes)
+        job = self.manager.tx_jobs.get(bytes.fromhex(result["job_id"]))
+        mined = job.get_tx()
+        self.assertEqual(mined.outputs[0].value, MAX_AMOUNT)
+        self.assertTrue(mined.has_shielded_outputs())
