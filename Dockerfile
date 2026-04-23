@@ -15,10 +15,16 @@ RUN poetry config virtualenvs.create false \
 
 FROM python:3.11-alpine
 
-COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-RUN apk add libgcc
+RUN addgroup -S -g 10001 appuser && adduser -S -u 10001 -G appuser -D -h /app -s /sbin/nologin appuser
 
-COPY txstratum/ ./txstratum
-COPY main.py log.conf ./
+WORKDIR /app
+
+COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+RUN apk add --no-cache libgcc
+
+COPY --chown=appuser:appuser txstratum/ ./txstratum
+COPY --chown=appuser:appuser main.py log.conf ./
+
+USER appuser
 
 ENTRYPOINT ["python", "-m", "main"]
