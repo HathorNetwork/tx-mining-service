@@ -138,6 +138,14 @@ def create_parser() -> ArgumentParser:
         default=None,
     )
 
+    parser.add_argument(
+        "--log-level",
+        help="Logging level: DEBUG, INFO, WARNING, ERROR (default INFO). "
+        "Works with both --log-config and --json-logs.",
+        type=str,
+        default="INFO",
+    )
+
     logs = parser.add_mutually_exclusive_group()
     logs.add_argument(
         "--log-config",
@@ -188,8 +196,11 @@ class RunService:
         from txstratum.utils import start_logging
 
         start_logging()
+        # Resolve the configured log level so DEBUG works under --json-logs too
+        # (previously --json-logs hardcoded INFO and silently dropped DEBUG records).
+        level = getattr(logging, str(args.log_level).upper(), logging.INFO)
         if args.json_logs:
-            logging.basicConfig(level=logging.INFO, format="%(message)s")
+            logging.basicConfig(level=level, format="%(message)s")
             from structlog.stdlib import LoggerFactory
 
             structlog.configure(
@@ -207,11 +218,18 @@ class RunService:
             logger.info("Logging with json format...")
         elif os.path.exists(args.log_config):
             logging.config.fileConfig(args.log_config)
+            # Override the file's root level so --log-level takes effect even when a
+            # log.conf (default INFO) is used.
+            logging.getLogger().setLevel(level)
             from structlog.stdlib import LoggerFactory
 
             structlog.configure(logger_factory=LoggerFactory())
             logger.info("tx-mining-service", backend=args.backend)
-            logger.info("Configuring log...", log_config=args.log_config)
+            logger.info(
+                "Configuring log...",
+                log_config=args.log_config,
+                effective_level=logging.getLevelName(level),
+            )
         else:
             logger.info("tx-mining-service", backend=args.backend)
             logger.info(

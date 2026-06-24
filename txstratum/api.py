@@ -17,7 +17,11 @@ import txstratum.time
 from txstratum.exceptions import JobAlreadyExists, NewJobRefused
 from txstratum.healthcheck.healthcheck import HealthCheck
 from txstratum.jobs import JobStatus, TxJob
-from txstratum.middleware import create_middleware_version_check
+from txstratum.middleware import (
+    create_error_middleware,
+    create_middleware_version_check,
+    get_real_ip,
+)
 
 if TYPE_CHECKING:
     from txstratum.filters import TXFilter
@@ -72,11 +76,13 @@ class App:
         self.tx_filters = tx_filters or []
         self.app = web.Application(
             middlewares=[
+                # Outermost: log any unhandled exception / 5xx with request context.
+                create_error_middleware(self.log),
                 create_middleware_version_check(
                     min_wallet_desktop_version,
                     min_wallet_mobile_version,
                     min_wallet_headless_version,
-                )
+                ),
             ]
         )
         self.app.router.add_get("/health-check", self.health_check)
@@ -140,39 +146,107 @@ class App:
         - propagate: bool, propagate tx to Hathor’s full node after it is solved
         - add_parents: bool, add parents before resolving the tx
         """
+        user_agent = request.headers.get("User-Agent")
+        real_ip = get_real_ip(request)
         try:
             data = await request.json()
         except json.decoder.JSONDecodeError:
-            self.log.debug("cannot-decode-json")
+            self.log.warning(
+                "submit-job-rejected",
+                reason="cannot-decode-json",
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "cannot-decode-json"}, status=400)
         if not isinstance(data, dict):
-            self.log.debug("json-must-be-an-object", data=data)
+            self.log.warning(
+                "submit-job-rejected",
+                reason="json-must-be-an-object",
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "json-must-be-an-object"}, status=400)
         tx_hex = data.get("tx")
         if not tx_hex:
-            self.log.debug("missing-tx", data=data)
+            self.log.warning(
+                "submit-job-rejected",
+                reason="missing-tx",
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "missing-tx"}, status=400)
         try:
             tx_bytes = bytes.fromhex(tx_hex)
             tx = tx_or_block_from_bytes(tx_bytes)
-        except (ValueError, TxValidationError, StructError):
-            self.log.debug("invalid-tx(1)", data=data)
+        except (ValueError, TxValidationError, StructError) as e:
+            # Capture WHICH error and the offending hex so it can be re-parsed offline.
+            self.log.warning(
+                "submit-job-rejected",
+                reason="invalid-tx",
+                detail="parse-error",
+                exc_type=type(e).__name__,
+                exception=repr(e),
+                tx_len=len(tx_hex),
+                tx_hex=tx_hex,
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "invalid-tx"}, status=400)
 
         if not isinstance(tx, (Transaction, TokenCreationTransaction)):
-            self.log.debug("invalid-tx(2)", data=data)
+            self.log.warning(
+                "submit-job-rejected",
+                reason="invalid-tx",
+                detail="not-a-transaction",
+                tx_type=type(tx).__name__,
+                tx_hex=tx_hex,
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "invalid-tx"}, status=400)
 
+        # Best-effort tx fingerprint for correlation; logging must never raise.
+        try:
+            tx_id = tx.calculate_hash().hex()
+        except Exception:
+            tx_id = None
+
         if tx.weight > self.max_tx_weight:
-            self.log.debug("tx-weight-is-too-high", data=data)
+            self.log.warning(
+                "submit-job-rejected",
+                reason="tx-weight-is-too-high",
+                tx_weight=tx.weight,
+                max_tx_weight=self.max_tx_weight,
+                tx_id=tx_id,
+                tx_hex=tx_hex,
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "tx-weight-is-too-high"}, status=400)
 
         if not tx.is_standard(self.max_output_script_size, self.only_standard_script):
-            self.log.debug("non-standard-tx", data=data)
+            self.log.warning(
+                "submit-job-rejected",
+                reason="non-standard-tx",
+                max_output_script_size=self.max_output_script_size,
+                tx_id=tx_id,
+                tx_hex=tx_hex,
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "non-standard-tx"}, status=400)
 
         for tx_filter in self.tx_filters:
             if await tx_filter.check_tx(tx, data):
+                self.log.warning(
+                    "submit-job-rejected",
+                    reason="tx-filter",
+                    filter=type(tx_filter).__name__,
+                    tx_id=tx_id,
+                    tx_hex=tx_hex,
+                    user_agent=user_agent,
+                    real_ip=real_ip,
+                )
                 return web.json_response({"error": "invalid-tx"}, status=400)
 
         now = txstratum.time.time()
@@ -182,7 +256,17 @@ class App:
                 tx.timestamp = int(now)
                 tx_bytes = bytes(tx)
             else:
-                self.log.debug("tx-timestamp-invalid", data=data)
+                self.log.warning(
+                    "submit-job-rejected",
+                    reason="tx-timestamp-invalid",
+                    tx_timestamp=tx.timestamp,
+                    server_now=int(now),
+                    delta=abs(tx.timestamp - now),
+                    max_timestamp_delta=self.max_timestamp_delta,
+                    tx_id=tx_id,
+                    user_agent=user_agent,
+                    real_ip=real_ip,
+                )
                 return web.json_response({"error": "tx-timestamp-invalid"}, status=400)
 
         if "timeout" not in data:
@@ -191,11 +275,23 @@ class App:
             try:
                 timeout = min(self.tx_timeout, float(data["timeout"]))
             except ValueError:
-                self.log.debug("invalid-timeout(1)", data=data)
+                self.log.warning(
+                    "submit-job-rejected",
+                    reason="invalid-timeout",
+                    requested_timeout=data.get("timeout"),
+                    user_agent=user_agent,
+                    real_ip=real_ip,
+                )
                 return web.json_response({"error": "invalid-timeout"}, status=400)
 
             if timeout <= 0:
-                self.log.debug("invalid-timeout(2)", data=data)
+                self.log.warning(
+                    "submit-job-rejected",
+                    reason="invalid-timeout",
+                    requested_timeout=data.get("timeout"),
+                    user_agent=user_agent,
+                    real_ip=real_ip,
+                )
                 return web.json_response({"error": "invalid-timeout"}, status=400)
 
         add_parents = data.get("add_parents", False)
@@ -207,17 +303,51 @@ class App:
         try:
             self.manager.add_job(job)
         except JobAlreadyExists:
-            self.log.debug("job-already-exists", data=data)
+            self.log.info(
+                "submit-job-duplicate",
+                job_id=job.uuid.hex(),
+                tx_id=tx_id,
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             running_job = self.manager.tx_jobs[job.uuid]
             return web.json_response(running_job.to_dict())
         except NewJobRefused:
-            self.log.debug("new-job-refused", data=data)
+            self.log.warning(
+                "submit-job-refused",
+                reason="new-job-refused",
+                job_id=job.uuid.hex(),
+                tx_id=tx_id,
+                user_agent=user_agent,
+                real_ip=real_ip,
+            )
             return web.json_response({"error": "new-job-refused"}, status=503)
+        # Keystone log: ties this job_id to the client so any later async failure
+        # (add_parents / timeout / propagate) logged by the manager is attributable.
+        self.log.info(
+            "submit-job-accepted",
+            job_id=job.uuid.hex(),
+            tx_id=tx_id,
+            tx_weight=tx.weight,
+            add_parents=add_parents,
+            propagate=propagate,
+            timeout=timeout,
+            user_agent=user_agent,
+            real_ip=real_ip,
+            tx_hex=tx_hex,
+        )
         return web.json_response(job.to_dict())
 
-    def _get_job(self, uuid_hex: Optional[str]) -> TxJob:
+    def _get_job(self, request: web.Request, uuid_hex: Optional[str]) -> TxJob:
         """Return job from uuid_hex. It raises web exceptions for common issues."""
         if not uuid_hex:
+            self.log.info(
+                "job-lookup-failed",
+                reason="missing-job-id",
+                endpoint=request.path,
+                user_agent=request.headers.get("User-Agent"),
+                real_ip=get_real_ip(request),
+            )
             raise web.HTTPBadRequest(
                 body=json.dumps({"error": "missing-job-id"}).encode("ascii"),
                 content_type="application/json",
@@ -225,12 +355,30 @@ class App:
         try:
             uuid = bytes.fromhex(uuid_hex)
         except ValueError:
+            self.log.info(
+                "job-lookup-failed",
+                reason="invalid-uuid",
+                job_id=uuid_hex,
+                endpoint=request.path,
+                user_agent=request.headers.get("User-Agent"),
+                real_ip=get_real_ip(request),
+            )
             raise web.HTTPBadRequest(
                 body=json.dumps({"error": "invalid-uuid"}).encode("ascii"),
                 content_type="application/json",
             )
         job = self.manager.get_job(uuid)
         if job is None:
+            # A 404 here often means the job already timed out / was cleaned up:
+            # correlate with the manager's "TxJob timeout" log for the same job_id.
+            self.log.info(
+                "job-lookup-failed",
+                reason="job-not-found",
+                job_id=uuid_hex,
+                endpoint=request.path,
+                user_agent=request.headers.get("User-Agent"),
+                real_ip=get_real_ip(request),
+            )
             raise web.HTTPNotFound(
                 body=json.dumps({"error": "job-not-found"}).encode("ascii"),
                 content_type="application/json",
@@ -244,7 +392,7 @@ class App:
         Query:
         - job-id: str, job identifier
         """
-        job = self._get_job(request.query.get("job-id"))
+        job = self._get_job(request, request.query.get("job-id"))
         return web.json_response(job.to_dict())
 
     async def cancel_job(self, request: web.Request) -> web.Response:
@@ -254,7 +402,7 @@ class App:
         Query:
         - job-id: str, job identifier
         """
-        job = self._get_job(request.query.get("job-id"))
+        job = self._get_job(request, request.query.get("job-id"))
         if job.status in JobStatus.get_after_mining_states():
             return web.json_response({"error": "job-has-already-finished"}, status=400)
         self.manager.cancel_job(job)

@@ -3,19 +3,79 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
 import re
-from typing import Awaitable, Callable, Optional, Pattern
+from typing import Any, Awaitable, Callable, Optional, Pattern
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
+from structlog import get_logger
 
 from txstratum.utils import is_version_gte
+
+logger = get_logger()
 
 # Middleware factory return type
 Middleware = Callable[[web.Request, Handler], Awaitable[web.StreamResponse]]
 
 # Error message
 VERSION_CHECK_ERROR_MESSAGE = "wallet-version-too-old"
+
+
+def get_real_ip(request: web.Request) -> Optional[str]:
+    """Return the real client IP, preferring X-Forwarded-For over the direct peer.
+
+    Behind a load balancer / reverse proxy ``request.remote`` is the proxy's IP;
+    the original client is the first entry of the X-Forwarded-For header.
+    """
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.remote
+
+
+def create_error_middleware(log: Any) -> Middleware:
+    """Middleware that logs every unhandled exception / 5xx with request context.
+
+    aiohttp turns an uncaught handler exception into a bare HTTP 500 with no
+    structured, attributable log. This wrapper records the method, path, client
+    (User-Agent + real IP) and the exception+traceback before re-raising, so a
+    client-side "An unexpected error happened" always has a server-side trace.
+    """
+
+    @web.middleware
+    async def error_logging(
+        request: web.Request, handler: Handler
+    ) -> web.StreamResponse:
+        try:
+            return await handler(request)
+        except web.HTTPException as http_exc:
+            # Responses raised on purpose. Only 5xx are worth an error log here.
+            if http_exc.status >= 500:
+                log.error(
+                    "request-http-exception",
+                    status=http_exc.status,
+                    method=request.method,
+                    path=request.path,
+                    user_agent=request.headers.get("User-Agent"),
+                    real_ip=get_real_ip(request),
+                )
+            raise
+        except Exception as e:
+            log.exception(
+                "unhandled-request-error",
+                method=request.method,
+                path=request.path,
+                user_agent=request.headers.get("User-Agent"),
+                real_ip=get_real_ip(request),
+                exception=repr(e),
+            )
+            raise web.HTTPInternalServerError(
+                text=json.dumps({"error": "internal-error"}),
+                content_type="application/json",
+            )
+
+    return error_logging
 
 # Compiled wallet regex
 # We should compile them outside the function to improve
@@ -78,6 +138,15 @@ def create_middleware_version_check(
                 WALLET_DESKTOP_COMPILED_REGEX, user_agent
             )
             if version and not is_version_gte(version, min_wallet_desktop_version):
+                logger.warning(
+                    "wallet-version-rejected",
+                    wallet_type="desktop",
+                    detected_version=version,
+                    min_version=min_wallet_desktop_version,
+                    user_agent=user_agent,
+                    real_ip=get_real_ip(request),
+                    path=request.path,
+                )
                 return web.json_response(
                     {
                         "error": VERSION_CHECK_ERROR_MESSAGE,
@@ -96,6 +165,15 @@ def create_middleware_version_check(
                 WALLET_MOBILE_COMPILED_REGEX, user_agent
             )
             if version and not is_version_gte(version, min_wallet_mobile_version):
+                logger.warning(
+                    "wallet-version-rejected",
+                    wallet_type="mobile",
+                    detected_version=version,
+                    min_version=min_wallet_mobile_version,
+                    user_agent=user_agent,
+                    real_ip=get_real_ip(request),
+                    path=request.path,
+                )
                 return web.json_response(
                     {
                         "error": VERSION_CHECK_ERROR_MESSAGE,
@@ -114,6 +192,15 @@ def create_middleware_version_check(
                 search = WALLET_MOBILE_CUSTOM_COMPILED_REGEX.search(user_agent)
                 if search:
                     # If the regex found it, then we should block
+                    logger.warning(
+                        "wallet-version-rejected",
+                        wallet_type="mobile-legacy",
+                        detected_version="HathorMobile/1",
+                        min_version=min_wallet_mobile_version,
+                        user_agent=user_agent,
+                        real_ip=get_real_ip(request),
+                        path=request.path,
+                    )
                     return web.json_response(
                         {
                             "error": VERSION_CHECK_ERROR_MESSAGE,
@@ -129,6 +216,15 @@ def create_middleware_version_check(
                 WALLET_HEADLESS_COMPILED_REGEX, user_agent
             )
             if version and not is_version_gte(version, min_wallet_headless_version):
+                logger.warning(
+                    "wallet-version-rejected",
+                    wallet_type="headless",
+                    detected_version=version,
+                    min_version=min_wallet_headless_version,
+                    user_agent=user_agent,
+                    real_ip=get_real_ip(request),
+                    path=request.path,
+                )
                 return web.json_response(
                     {
                         "error": VERSION_CHECK_ERROR_MESSAGE,

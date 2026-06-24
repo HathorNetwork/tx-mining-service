@@ -387,6 +387,19 @@ class TxMiningManager:
         try:
             parents: List[bytes] = await self.backend.get_tx_parents()
         except Exception as e:
+            # Backend full-node failed to provide parents. Without this log the
+            # failure is invisible server-side: the job is marked failed and the
+            # client only sees the generic "An unexpected error happened".
+            self.log.exception(
+                "add-parents-failed",
+                job_id=job.uuid.hex(),
+                tx_weight=job.get_weight(),
+                tx_hex=bytes(job.get_tx()).hex(),
+                add_parents=job.add_parents,
+                propagate=job.propagate,
+                backend=str(getattr(self.backend, "_base_url", self.backend)),
+                exception=repr(e),
+            )
             job.mark_as_failed("Unhandled exception: {}".format(e))
             # Schedule to clean it up.
             self.schedule_job_clean_up(job)
@@ -408,7 +421,18 @@ class TxMiningManager:
         """Stop mining a tx job because it timeout."""
         if job.status in JobStatus.get_after_mining_states():
             return
-        self.log.info("TxJob timeout", job=job.to_dict())
+        # WARNING (not INFO): a timeout is a client-visible failure. Include the
+        # tx hex + miner capacity so we can tell WHY it timed out (no miners vs
+        # low hashrate vs queue backlog vs weight-too-high-for-hashrate).
+        self.log.warning(
+            "TxJob timeout",
+            job=job.to_dict(),
+            tx_hex=bytes(job.get_tx()).hex(),
+            miners_count=len(self.miners),
+            total_hashrate_ghs=sum(p.hashrate_ghs for p in self.miners.values()),
+            queue_len=len(self.tx_queue),
+            waited=txstratum.time.time() - job.created_at,
+        )
         self.txs_timeout += 1
         self.pubsub.emit(TxMiningEvents.MANAGER_TX_TIMEOUT, job)
         job.status = JobStatus.TIMEOUT
