@@ -28,6 +28,7 @@ from txstratum.api import App
 from txstratum.dev.block_miner import BlockMiner, solve_block
 from txstratum.dev.manager import DevMiningManager
 from txstratum.dev.tx_miner import solve_tx
+from txstratum.jobs import JobStatus, TxJob
 
 # Same TX1_DATA from test_api.py — a serialized transaction that we use as a
 # realistic input for PoW solving. The weight is ~32, so without
@@ -53,6 +54,60 @@ def update_timestamp(tx_bytes: bytes, *, delta: int = 0) -> bytes:
     tx = tx_or_block_from_bytes(tx_bytes)
     tx.timestamp = int(txstratum.time.time()) + delta
     return bytes(tx)
+
+
+class FakeResponse:
+    """Stand-in for an aiohttp response, usable as an async context manager."""
+
+    def __init__(self, status, payload):
+        self.status = status
+        self._payload = payload
+
+    async def json(self):
+        return self._payload
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
+class FakeSession:
+    """Stand-in for HathorClient._session, serving GET /transaction?id=...
+
+    The dev-miner reads parent timestamps straight off the fullnode, so the
+    tests need a session that answers that one endpoint. Requests are recorded
+    so tests can assert on caching.
+    """
+
+    def __init__(self, timestamps=None, *, status=200):
+        # Maps hex tx id -> timestamp. A hash absent from the map is answered
+        # the way the fullnode answers an unknown tx: success=False.
+        self.timestamps = timestamps or {}
+        self.status = status
+        self.requested_ids = []
+
+    def get(self, url, params=None):
+        tx_id = (params or {}).get("id")
+        self.requested_ids.append(tx_id)
+        timestamp = self.timestamps.get(tx_id)
+        if timestamp is None:
+            return FakeResponse(self.status, {"success": False})
+        return FakeResponse(
+            self.status, {"success": True, "tx": {"timestamp": timestamp}}
+        )
+
+
+def make_backend(parents=None, *, parent_timestamps=None, session_status=200):
+    """Build a mocked HathorClient whose parent lookups actually resolve."""
+    parents = parents if parents is not None else [b"\x00" * 32, b"\x01" * 32]
+    backend = MagicMock()
+    backend.get_tx_parents = AsyncMock(return_value=parents)
+    backend.push_tx_or_block = AsyncMock(return_value=True)
+    backend._session = FakeSession(parent_timestamps, status=session_status)
+    backend._get_url = lambda path: f"http://fullnode/v1a/{path}"
+    return backend
 
 
 # ---------------------------------------------------------------------------
@@ -106,11 +161,7 @@ class TestDevMiningManager(AioHTTPTestCase):
     __test__ = True
 
     async def get_application(self):
-        self.backend = MagicMock()
-        self.backend.get_tx_parents = AsyncMock(
-            return_value=[b"\x00" * 32, b"\x01" * 32]
-        )
-        self.backend.push_tx_or_block = AsyncMock(return_value=True)
+        self.backend = make_backend()
         self.manager = DevMiningManager(backend=self.backend)
         await self.manager.start()
         self.healthcheck = MagicMock()
@@ -258,6 +309,118 @@ BLOCK_DATA = bytes.fromhex(
     "000001ffffffe8b789180000001976a9147fd4ae0e4fb2d2854e76d359029d8078bb9"
     "9649e88ac40350000000000005e0f84a9000000000000000000000000000000278a7e"
 )
+
+
+class TestParentTimestampClamp(unittest.IsolatedAsyncioTestCase):
+    """The stamped timestamp must come out strictly above every parent's.
+
+    The fullnode enforces `tx.timestamp > parent.timestamp` at 1-second
+    granularity. Wall-clock time alone does not satisfy that when a parent was
+    stamped in the same second — the rejection reported in
+    HathorNetwork/tx-mining-service#172.
+    """
+
+    __test__ = True
+
+    # A fixed "now" so the expected timestamps are exact rather than windowed.
+    NOW = 1785951640
+
+    def setUp(self):
+        txstratum.time.set_time_function(lambda: float(self.NOW))
+
+    def tearDown(self):
+        txstratum.time.set_time_function(None)
+
+    async def test_uses_now_when_parents_are_older(self):
+        """The common case: nothing to clamp, so "now" stands unchanged."""
+        parent = b"\x0a" * 32
+        backend = make_backend(parent_timestamps={parent.hex(): self.NOW - 10})
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW, await manager._get_timestamp_for([parent]))
+
+    async def test_clamps_past_a_same_second_parent(self):
+        """The reported bug: parent stamped this second, so we must exceed it."""
+        parent = b"\x0a" * 32
+        backend = make_backend(parent_timestamps={parent.hex(): self.NOW})
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW + 1, await manager._get_timestamp_for([parent]))
+
+    async def test_clamps_past_the_newest_parent(self):
+        """With two parents, only the newest constrains the result."""
+        older, newer = b"\x0a" * 32, b"\x0b" * 32
+        backend = make_backend(
+            parent_timestamps={older.hex(): self.NOW - 5, newer.hex(): self.NOW}
+        )
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW + 1, await manager._get_timestamp_for([older, newer]))
+
+    async def test_clamps_past_a_parent_already_ahead_of_now(self):
+        """A same-second chain, which is what defeats a blind `now + 1`.
+
+        The parent was itself clamped to NOW + 1 a moment ago. Stamping this tx
+        `now + 1` would tie with it and be rejected; reading the parent's real
+        timestamp is what makes the chain resolve.
+        """
+        parent = b"\x0a" * 32
+        backend = make_backend(parent_timestamps={parent.hex(): self.NOW + 1})
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW + 2, await manager._get_timestamp_for([parent]))
+
+    async def test_falls_back_to_now_when_parent_is_unknown(self):
+        """An unreadable parent degrades to the old behavior, never an error."""
+        backend = make_backend(parent_timestamps={})
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW, await manager._get_timestamp_for([b"\x0a" * 32]))
+
+    async def test_falls_back_to_now_on_http_error(self):
+        parent = b"\x0a" * 32
+        backend = make_backend(
+            parent_timestamps={parent.hex(): self.NOW}, session_status=500
+        )
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW, await manager._get_timestamp_for([parent]))
+
+    async def test_no_parents_skips_the_lookup_entirely(self):
+        backend = make_backend()
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW, await manager._get_timestamp_for([]))
+        self.assertEqual([], backend._session.requested_ids)
+
+    async def test_parent_timestamps_are_cached(self):
+        """A confirmed tx's timestamp is immutable, so one read per hash."""
+        parent = b"\x0a" * 32
+        backend = make_backend(parent_timestamps={parent.hex(): self.NOW})
+        manager = DevMiningManager(backend=backend)
+        await manager._get_timestamp_for([parent])
+        await manager._get_timestamp_for([parent])
+        self.assertEqual([parent.hex()], backend._session.requested_ids)
+
+    async def test_cache_does_not_grow_without_bound(self):
+        parents = [bytes([i]) * 32 for i in range(1, 11)]
+        backend = make_backend(
+            parent_timestamps={p.hex(): self.NOW - 100 for p in parents}
+        )
+        manager = DevMiningManager(backend=backend)
+        manager.PARENT_TIMESTAMP_CACHE_SIZE = 4
+        for parent in parents:
+            await manager._get_timestamp_for([parent])
+        self.assertLessEqual(len(manager._parent_timestamps), 4)
+
+    async def test_mined_tx_carries_the_clamped_timestamp(self):
+        """The clamp reaches the solved tx, not just the helper in isolation."""
+        tx = tx_or_block_from_bytes(TX1_DATA)
+        tx.weight = 1.0
+        backend = make_backend(
+            parent_timestamps={p.hex(): self.NOW for p in tx.parents}
+        )
+        manager = DevMiningManager(backend=backend)
+        job = TxJob(bytes(tx))
+
+        await manager._mine_job(job)
+
+        self.assertEqual(JobStatus.DONE, job.status)
+        self.assertEqual(self.NOW + 1, job.get_tx().timestamp)
+        self.assertTrue(job.get_tx().verify_pow())
 
 
 class TestSolveBlock(AioHTTPTestCase):

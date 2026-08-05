@@ -25,6 +25,7 @@ needed is in cli.py to instantiate DevMiningManager instead of TxMiningManager.
 """
 
 import asyncio
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from structlog import get_logger
@@ -55,6 +56,11 @@ class DevMiningManager:
 
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
+    # Upper bound for the parent-timestamp cache. A confirmed transaction's
+    # timestamp never changes, so a cached entry cannot go stale; the bound is
+    # only here to keep the dict from growing without limit over a long run.
+    PARENT_TIMESTAMP_CACHE_SIZE = 1024
+
     def __init__(self, backend: "HathorClient"):
         """Initialize the dev mining manager."""
         self.log = logger.new()
@@ -63,6 +69,7 @@ class DevMiningManager:
         self.tx_jobs: Dict[bytes, TxJob] = {}
         self._tasks: Dict[bytes, asyncio.Task[None]] = {}
         self.refuse_new_jobs = False
+        self._parent_timestamps: "OrderedDict[bytes, int]" = OrderedDict()
 
         # Statistics — same fields as TxMiningManager for API compatibility.
         self.txs_solved: int = 0
@@ -182,6 +189,83 @@ class DevMiningManager:
         job.set_parents(parents)
         await self._mine_job(job)
 
+    async def _fetch_tx_timestamp(self, tx_hash: bytes) -> Optional[int]:
+        """Read one transaction's timestamp from the fullnode, or None.
+
+        hathorlib's HathorClient has no "get transaction by hash", and this fix
+        is deliberately confined to this repo, so the client's session and URL
+        builder are used directly. Both are private, which is exactly why this
+        is the only place that touches them: if hathorlib later grows a proper
+        accessor (or the parents endpoint starts returning timestamps, as
+        HathorNetwork/tx-mining-service#172 sketches), this body is the only
+        thing that has to change.
+
+        Returns None on any failure — a timestamp we cannot read is one we
+        cannot clamp against, and degrading to plain wall-clock time is far
+        better than failing the job.
+        """
+        cached = self._parent_timestamps.get(tx_hash)
+        if cached is not None:
+            self._parent_timestamps.move_to_end(tx_hash)
+            return cached
+
+        session = self.backend._session
+        if session is None:
+            return None
+
+        try:
+            url = self.backend._get_url("transaction")
+            async with session.get(url, params={"id": tx_hash.hex()}) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+        except Exception as e:
+            self.log.warn(
+                "Could not read parent timestamp",
+                parent=tx_hash.hex(),
+                error=f"{type(e).__name__}: {e}",
+            )
+            return None
+
+        if not data.get("success"):
+            return None
+        timestamp = data.get("tx", {}).get("timestamp")
+        if not isinstance(timestamp, int):
+            return None
+
+        self._parent_timestamps[tx_hash] = timestamp
+        if len(self._parent_timestamps) > self.PARENT_TIMESTAMP_CACHE_SIZE:
+            self._parent_timestamps.popitem(last=False)
+        return timestamp
+
+    async def _get_timestamp_for(self, parents: List[bytes]) -> int:
+        """Return a timestamp that is strictly greater than every parent's.
+
+        The fullnode requires `tx.timestamp > parent.timestamp` at 1-second
+        granularity, but wall-clock time alone does not guarantee that: two txs
+        broadcast in the same second, where one is picked as the other's
+        parent, produce a rejection the client cannot prevent or repair (both
+        fields are assigned here, under the nonce).
+
+        Clamping stays well inside consensus rules — hathor-core tolerates
+        timestamps up to MAX_FUTURE_TIMESTAMP_ALLOWED (300s) in the future, and
+        this exceeds "now" by at most one second per same-second parent chain.
+        """
+        now = int(txstratum.time.time())
+        if not parents:
+            return now
+
+        timestamps: List[Optional[int]] = list(
+            await asyncio.gather(
+                *(self._fetch_tx_timestamp(parent) for parent in parents)
+            )
+        )
+        known = [ts for ts in timestamps if ts is not None]
+        if not known:
+            return now
+
+        return max(now, max(known) + 1)
+
     async def _mine_job(self, job: TxJob) -> None:
         """Solve PoW for a transaction job.
 
@@ -196,8 +280,9 @@ class DevMiningManager:
 
         tx = job.get_tx()
         # Update timestamp to current time — the fullnode validates that tx
-        # timestamps are within an acceptable delta of the current time.
-        tx.timestamp = int(txstratum.time.time())
+        # timestamps are within an acceptable delta of the current time — and
+        # push it past the parents when they were stamped in this same second.
+        tx.timestamp = await self._get_timestamp_for(tx.parents)
 
         loop = asyncio.get_event_loop()
         solved = await loop.run_in_executor(None, solve_tx, tx)
