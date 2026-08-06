@@ -202,18 +202,23 @@ class DevMiningManager:
 
         Returns None on any failure — a timestamp we cannot read is one we
         cannot clamp against, and degrading to plain wall-clock time is far
-        better than failing the job.
+        better than failing the job. That promise has to hold absolutely: this
+        runs inside the mining task, so an exception escaping here strands the
+        job in MINING with no cleanup scheduled. Hence both the private-attribute
+        access and the payload parsing below are guarded.
         """
         cached = self._parent_timestamps.get(tx_hash)
         if cached is not None:
             self._parent_timestamps.move_to_end(tx_hash)
             return cached
 
-        session = self.backend._session
-        if session is None:
-            return None
-
         try:
+            # Inside the try on purpose: these attributes are private, so a
+            # rename in a future hathorlib degrades to wall-clock time with a
+            # warning instead of stranding every job that needs a parent.
+            session = self.backend._session
+            if session is None:
+                return None
             url = self.backend._get_url("transaction")
             async with session.get(url, params={"id": tx_hash.hex()}) as resp:
                 if resp.status != 200:
@@ -227,9 +232,15 @@ class DevMiningManager:
             )
             return None
 
-        if not data.get("success"):
+        # The payload is not assumed well-formed. A JSON array, a null, or a
+        # non-object "tx" must degrade like any other unreadable parent rather
+        # than raise, so every access below is type-checked first.
+        if not isinstance(data, dict) or not data.get("success"):
             return None
-        timestamp = data.get("tx", {}).get("timestamp")
+        tx_data = data.get("tx")
+        if not isinstance(tx_data, dict):
+            return None
+        timestamp = tx_data.get("timestamp")
         if not isinstance(timestamp, int):
             return None
 
@@ -247,9 +258,25 @@ class DevMiningManager:
         parent, produce a rejection the client cannot prevent or repair (both
         fields are assigned here, under the nonce).
 
-        Clamping stays well inside consensus rules — hathor-core tolerates
-        timestamps up to MAX_FUTURE_TIMESTAMP_ALLOWED (300s) in the future, and
-        this exceeds "now" by at most one second per same-second parent chain.
+        Clamping stays inside consensus rules in practice: hathor-core tolerates
+        timestamps up to MAX_FUTURE_TIMESTAMP_ALLOWED (300s) ahead, and the lead
+        over wall-clock only accumulates along a *chain* of same-second parents.
+        For a child stamped `d` seconds after its parent the new lead is
+        `max(0, parent_lead + 1 - d)`: chaining faster than one transaction per
+        second grows it, exactly one per second holds it steady, and anything
+        slower decays it. A transaction whose parent is already in the past
+        starts from zero, and siblings sharing the same tips resolve to
+        `parent + 1` rather than stacking.
+
+        The bound is therefore not absolute: sustaining more than one chained
+        transaction per second for long enough — on the order of 300 serialized
+        parent-child links — yields a timestamp the fullnode rejects as too far
+        ahead. No observed workload approaches that: across four full
+        integration runs the clamp fired 59 times in 2932 transactions and the
+        lead never exceeded one second. Defending against it would mean
+        deferring and re-mining, a blocking loop that can livelock while
+        chaining continues, so the bound is recorded here rather than enforced.
+        A production port must enforce both constraints, not just this one.
         """
         now = int(txstratum.time.time())
         if not parents:

@@ -99,6 +99,18 @@ class FakeSession:
         )
 
 
+class FixedPayloadSession:
+    """Serves one caller-supplied payload with HTTP 200, well-formed or not."""
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.requested_ids = []
+
+    def get(self, url, params=None):
+        self.requested_ids.append((params or {}).get("id"))
+        return FakeResponse(200, self.payload)
+
+
 def make_backend(parents=None, *, parent_timestamps=None, session_status=200):
     """Build a mocked HathorClient whose parent lookups actually resolve."""
     parents = parents if parents is not None else [b"\x00" * 32, b"\x01" * 32]
@@ -106,6 +118,17 @@ def make_backend(parents=None, *, parent_timestamps=None, session_status=200):
     backend.get_tx_parents = AsyncMock(return_value=parents)
     backend.push_tx_or_block = AsyncMock(return_value=True)
     backend._session = FakeSession(parent_timestamps, status=session_status)
+    backend._get_url = lambda path: f"http://fullnode/v1a/{path}"
+    return backend
+
+
+def make_backend_with_session(session, parents=None):
+    """Build a mocked HathorClient around an arbitrary session stand-in."""
+    parents = parents if parents is not None else [b"\x00" * 32, b"\x01" * 32]
+    backend = MagicMock()
+    backend.get_tx_parents = AsyncMock(return_value=parents)
+    backend.push_tx_or_block = AsyncMock(return_value=True)
+    backend._session = session
     backend._get_url = lambda path: f"http://fullnode/v1a/{path}"
     return backend
 
@@ -405,6 +428,58 @@ class TestParentTimestampClamp(unittest.IsolatedAsyncioTestCase):
         for parent in parents:
             await manager._get_timestamp_for([parent])
         self.assertLessEqual(len(manager._parent_timestamps), 4)
+
+    async def test_malformed_payloads_degrade_instead_of_raising(self):
+        """A structurally invalid payload must behave like an unreadable parent.
+
+        This helper runs inside the mining task, so an exception escaping it
+        propagates through asyncio.gather into _mine_job and strands the job in
+        MINING with no cleanup scheduled — see the companion test below.
+        """
+        malformed = [
+            ("json array", []),
+            ("null", None),
+            ("string", "not json"),
+            ("tx is an array", {"success": True, "tx": []}),
+            ("tx is null", {"success": True, "tx": None}),
+            ("tx is a string", {"success": True, "tx": "nope"}),
+            ("timestamp missing", {"success": True, "tx": {}}),
+            ("timestamp is a string", {"success": True, "tx": {"timestamp": "1"}}),
+        ]
+        for label, payload in malformed:
+            with self.subTest(payload=label):
+                backend = make_backend_with_session(FixedPayloadSession(payload))
+                manager = DevMiningManager(backend=backend)
+                self.assertEqual(
+                    self.NOW, await manager._get_timestamp_for([b"\x0a" * 32])
+                )
+
+    async def test_malformed_payload_does_not_strand_the_job(self):
+        """The job still completes and gets cleaned up, not left in MINING."""
+        tx = tx_or_block_from_bytes(TX1_DATA)
+        tx.weight = 1.0
+        backend = make_backend_with_session(
+            FixedPayloadSession({"success": True, "tx": []}), parents=list(tx.parents)
+        )
+        manager = DevMiningManager(backend=backend)
+        job = TxJob(bytes(tx))
+
+        await manager._mine_job(job)
+
+        self.assertEqual(JobStatus.DONE, job.status)
+        self.assertEqual(self.NOW, job.get_tx().timestamp)
+
+    async def test_missing_private_client_attribute_degrades(self):
+        """A hathorlib rename must not strand jobs either.
+
+        The helper reaches into HathorClient's private session and URL builder;
+        if either disappears, the clamp has to fall back to wall-clock time.
+        """
+        backend = MagicMock()
+        backend.get_tx_parents = AsyncMock(return_value=[])
+        del backend._session
+        manager = DevMiningManager(backend=backend)
+        self.assertEqual(self.NOW, await manager._get_timestamp_for([b"\x0a" * 32]))
 
     async def test_mined_tx_carries_the_clamped_timestamp(self):
         """The clamp reaches the solved tx, not just the helper in isolation."""
