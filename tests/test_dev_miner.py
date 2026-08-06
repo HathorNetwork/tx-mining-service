@@ -88,7 +88,10 @@ class FakeSession:
         self.status = status
         self.requested_ids = []
 
-    def get(self, url, params=None):
+    def get(self, url, params=None, **kwargs):
+        # **kwargs mirrors aiohttp's real signature, which takes `timeout` and
+        # friends — without it the caller's TypeError is swallowed by the
+        # helper's own degradation path and every lookup silently returns None.
         tx_id = (params or {}).get("id")
         self.requested_ids.append(tx_id)
         timestamp = self.timestamps.get(tx_id)
@@ -106,13 +109,16 @@ class FixedPayloadSession:
         self.payload = payload
         self.requested_ids = []
 
-    def get(self, url, params=None):
+    def get(self, url, params=None, **kwargs):
         self.requested_ids.append((params or {}).get("id"))
         return FakeResponse(200, self.payload)
 
 
 def make_backend(parents=None, *, parent_timestamps=None, session_status=200):
-    """Build a mocked HathorClient whose parent lookups actually resolve."""
+    """Mock HathorClient with the session and URL builder the lookup needs.
+
+    Predecessors are unknown unless `parent_timestamps` names them.
+    """
     parents = parents if parents is not None else [b"\x00" * 32, b"\x01" * 32]
     backend = MagicMock()
     backend.get_tx_parents = AsyncMock(return_value=parents)
@@ -418,6 +424,64 @@ class TestParentTimestampClamp(unittest.IsolatedAsyncioTestCase):
         await manager._get_timestamp_for([parent])
         self.assertEqual([parent.hex()], backend._session.requested_ids)
 
+    async def test_clamps_past_a_spent_tx_that_is_not_a_parent(self):
+        """Inputs are checked too, by a different verifier than parents.
+
+        `transaction_verifier` rejects `tx.timestamp <= spent_tx.timestamp` for
+        every input, independently of the parent rule. A spent tx that
+        something else already confirmed is not a tip, so it can never be
+        chosen as a parent — clamping only above parents would miss it.
+        """
+        tx = tx_or_block_from_bytes(TX1_DATA)
+        tx.weight = 1.0
+        spent = tx.inputs[0].tx_id
+        self.assertNotIn(spent, tx.parents)
+
+        # Only the spent tx has a known timestamp; the parents are unreadable,
+        # so a parents-only clamp would fall back to NOW and be rejected.
+        backend = make_backend_with_session(
+            FakeSession({spent.hex(): self.NOW}), parents=list(tx.parents)
+        )
+        manager = DevMiningManager(backend=backend)
+        job = TxJob(bytes(tx))
+
+        await manager._mine_job(job)
+
+        self.assertEqual(JobStatus.DONE, job.status)
+        self.assertEqual(self.NOW + 1, job.get_tx().timestamp)
+        self.assertIn(spent.hex(), backend._session.requested_ids)
+
+    async def test_duplicate_predecessors_are_fetched_once(self):
+        """A tx often spends several outputs of the same parent."""
+        shared = b"\x0a" * 32
+        backend = make_backend(parent_timestamps={shared.hex(): self.NOW})
+        manager = DevMiningManager(backend=backend)
+
+        self.assertEqual(
+            self.NOW + 1, await manager._get_timestamp_for([shared, shared, shared])
+        )
+        self.assertEqual([shared.hex()], backend._session.requested_ids)
+
+    async def test_cache_evicts_the_least_recently_used_entry(self):
+        """Eviction order, not just the bound.
+
+        A plain FIFO would rotate out the hot tips that nearly every job
+        re-reads, costing a fullnode round-trip per predecessor per job.
+        """
+        keys = [bytes([i]) * 32 for i in (1, 2, 3)]
+        backend = make_backend(
+            parent_timestamps={k.hex(): self.NOW - 100 for k in keys}
+        )
+        manager = DevMiningManager(backend=backend)
+        manager.PARENT_TIMESTAMP_CACHE_SIZE = 2
+
+        await manager._get_timestamp_for([keys[0]])
+        await manager._get_timestamp_for([keys[1]])
+        await manager._get_timestamp_for([keys[0]])  # keys[0] becomes the MRU
+        await manager._get_timestamp_for([keys[2]])  # evicts the LRU, keys[1]
+
+        self.assertEqual([keys[0], keys[2]], list(manager._parent_timestamps))
+
     async def test_cache_does_not_grow_without_bound(self):
         parents = [bytes([i]) * 32 for i in range(1, 11)]
         backend = make_backend(
@@ -455,7 +519,7 @@ class TestParentTimestampClamp(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def test_malformed_payload_does_not_strand_the_job(self):
-        """The job still completes and gets cleaned up, not left in MINING."""
+        """The job still reaches DONE rather than being left in MINING."""
         tx = tx_or_block_from_bytes(TX1_DATA)
         tx.weight = 1.0
         backend = make_backend_with_session(
@@ -470,10 +534,10 @@ class TestParentTimestampClamp(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.NOW, job.get_tx().timestamp)
 
     async def test_missing_private_client_attribute_degrades(self):
-        """A hathorlib rename must not strand jobs either.
+        """A hathorlib rename of `_session` degrades to wall-clock time.
 
-        The helper reaches into HathorClient's private session and URL builder;
-        if either disappears, the clamp has to fall back to wall-clock time.
+        The helper reaches into HathorClient's private attributes, so an
+        upstream rename must fall back rather than raise.
         """
         backend = MagicMock()
         backend.get_tx_parents = AsyncMock(return_value=[])
