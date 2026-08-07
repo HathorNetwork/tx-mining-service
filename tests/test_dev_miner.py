@@ -561,6 +561,90 @@ class TestParentTimestampClamp(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.NOW + 1, job.get_tx().timestamp)
         self.assertTrue(job.get_tx().verify_pow())
 
+    async def test_client_timestamp_is_honoured_when_it_leads(self):
+        """The client picked the inputs, so its timestamp is information.
+
+        It is the one party that already knows what its inputs spend, and
+        api.py has bounded the value to MAX_TIMESTAMP_DELTA of now before we
+        see it. A client that clamps above its own inputs therefore needs no
+        per-input lookup here at all.
+        """
+        tx = tx_or_block_from_bytes(TX1_DATA)
+        tx.weight = 1.0
+        tx.timestamp = self.NOW + 50
+        backend = make_backend(
+            parent_timestamps={p.hex(): self.NOW - 10 for p in tx.parents}
+        )
+        manager = DevMiningManager(backend=backend)
+        job = TxJob(bytes(tx))
+
+        await manager._mine_job(job)
+
+        self.assertEqual(self.NOW + 50, job.get_tx().timestamp)
+
+    async def test_client_timestamp_never_lowers_the_clamp(self):
+        """Honouring the client is a floor, never a ceiling.
+
+        A stale or careless client value must not defeat the parent clamp —
+        otherwise trusting it would reintroduce the rejection this fixes.
+        """
+        tx = tx_or_block_from_bytes(TX1_DATA)
+        tx.weight = 1.0
+        tx.timestamp = self.NOW - 100
+        backend = make_backend(
+            parent_timestamps={p.hex(): self.NOW for p in tx.parents}
+        )
+        manager = DevMiningManager(backend=backend)
+        job = TxJob(bytes(tx))
+
+        await manager._mine_job(job)
+
+        self.assertEqual(self.NOW + 1, job.get_tx().timestamp)
+
+    async def test_our_own_output_is_remembered(self):
+        """A tx mined here is the likeliest predecessor of the next job.
+
+        Reading it back from the fullnode would be a round-trip for a timestamp
+        this service chose itself moments ago — and a chained flock is, by
+        construction, mostly this service's own output.
+        """
+        tx = tx_or_block_from_bytes(TX1_DATA)
+        tx.weight = 1.0
+        backend = make_backend(
+            parent_timestamps={p.hex(): self.NOW for p in tx.parents}
+        )
+        manager = DevMiningManager(backend=backend)
+        job = TxJob(bytes(tx))
+
+        await manager._mine_job(job)
+        mined = job.get_tx()
+        backend._session.requested_ids.clear()
+
+        self.assertEqual(
+            mined.timestamp + 1, await manager._get_timestamp_for([mined.hash])
+        )
+        self.assertEqual([], backend._session.requested_ids)
+
+    async def test_remembered_timestamp_is_the_one_actually_stamped(self):
+        """What gets recorded must be the final value, not a pre-clamp draft.
+
+        The client's floor is applied after the predecessor lookups, so
+        recording the wrong one would under-clamp every tx chained onto this.
+        """
+        tx = tx_or_block_from_bytes(TX1_DATA)
+        tx.weight = 1.0
+        tx.timestamp = self.NOW + 50
+        backend = make_backend(
+            parent_timestamps={p.hex(): self.NOW for p in tx.parents}
+        )
+        manager = DevMiningManager(backend=backend)
+        job = TxJob(bytes(tx))
+
+        await manager._mine_job(job)
+        mined = job.get_tx()
+
+        self.assertEqual(self.NOW + 50, manager._parent_timestamps[mined.hash])
+
 
 class TestSolveBlock(AioHTTPTestCase):
     """Test the block PoW solver (solve_block)."""

@@ -266,10 +266,14 @@ class DevMiningManager:
             self.log.warn("Malformed transaction payload", parent=tx_hash.hex())
             return None
 
+        self._remember_timestamp(tx_hash, timestamp)
+        return timestamp
+
+    def _remember_timestamp(self, tx_hash: bytes, timestamp: int) -> None:
+        """Record one hash's timestamp, evicting the oldest past the bound."""
         self._parent_timestamps[tx_hash] = timestamp
         if len(self._parent_timestamps) > self.PARENT_TIMESTAMP_CACHE_SIZE:
             self._parent_timestamps.popitem(last=False)
-        return timestamp
 
     async def _get_timestamp_for(self, predecessors: List[bytes]) -> int:
         """Return a timestamp strictly greater than every predecessor's.
@@ -320,8 +324,19 @@ class DevMiningManager:
         # Stamp above everything the fullnode compares this tx against: its DAG
         # parents and every tx it spends. Both are checked, in separate
         # verifiers, and a spent tx is frequently not among the parents.
-        tx.timestamp = await self._get_timestamp_for(
-            [*tx.parents, *(txin.tx_id for txin in tx.inputs)]
+        #
+        # The client's own timestamp is a floor here, not something to discard.
+        # It chose the inputs, so it is the one party that already knows what
+        # they spend — and api.py has already bounded it to within
+        # MAX_TIMESTAMP_DELTA of now, so honouring it cannot push this tx past
+        # what the fullnode accepts. A client that clamps above its own inputs
+        # therefore needs no per-input lookup here at all, which is the only
+        # version of this that survives a tx with 200 inputs.
+        tx.timestamp = max(
+            tx.timestamp,
+            await self._get_timestamp_for(
+                [*tx.parents, *(txin.tx_id for txin in tx.inputs)]
+            ),
         )
 
         loop = asyncio.get_event_loop()
@@ -331,6 +346,14 @@ class DevMiningManager:
             self.txs_failed += 1
             self._schedule_cleanup(job)
             return
+
+        # Everything mined here is a candidate predecessor for the next job: a
+        # chained flock arriving at one service is, by construction, mostly this
+        # service's own recent output. Recording it turns those lookups into
+        # memory reads at exactly the concurrency that makes the clamp
+        # load-bearing — and the hash covers the timestamp, so the entry is
+        # valid whatever happens to the tx afterwards.
+        self._remember_timestamp(tx.hash, tx.timestamp)
 
         elapsed_ms = (txstratum.time.time() - start) * 1000
         nonce = tx.get_struct_nonce()
