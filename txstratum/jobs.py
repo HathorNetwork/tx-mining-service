@@ -36,6 +36,14 @@ class JobStatus(enum.Enum):
         return set([cls.DONE, cls.FAILED, cls.TIMEOUT, cls.CANCELLED])
 
 
+class JobFailureReason(enum.Enum):
+    """Why a tx job finished without being solved (timeouts are counted apart)."""
+
+    PROPAGATION = "propagation"
+    GET_PARENTS = "get_parents"
+    CANCELLED = "cancelled"
+
+
 class TxJob:
     """Tx job.
 

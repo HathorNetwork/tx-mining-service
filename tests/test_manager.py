@@ -18,9 +18,10 @@ from hathorlib.exceptions import PushTxFailed
 import txstratum.time
 from tests.utils import ClockedTestCase
 from txstratum.exceptions import JobAlreadyExists
-from txstratum.jobs import JobStatus, TxJob
+from txstratum.jobs import JobFailureReason, JobStatus, TxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
+from txstratum.pubsub import TxMiningEvents
 
 TX1_DATA = bytes.fromhex(
     "0001000102000000000000089c0d40a9b1edfb499bc624833fde87ae459d495000393f4aaa00006"
@@ -930,6 +931,33 @@ class ManagerTestCase(unittest.TestCase):
         # Assertions
         self.assertEqual(self.manager.backend.pushes_attempted, 1)
         self.assertEqual(tx_job.status, JobStatus.FAILED)
+        self.manager.pubsub.emit.assert_any_call(
+            TxMiningEvents.MANAGER_TX_FAILED,
+            {"tx_job": tx_job, "reason": JobFailureReason.PROPAGATION},
+        )
+
+    def test_error_when_getting_parents(self):
+        # HathorClientTest.get_tx_parents raises NotImplementedError
+        job = TxJob(TX1_DATA, add_parents=True)
+        self.assertTrue(self.manager.add_job(job))
+        self._run_all_pending_events()
+
+        self.assertEqual(job.status, JobStatus.FAILED)
+        self.manager.pubsub.emit.assert_any_call(
+            TxMiningEvents.MANAGER_TX_FAILED,
+            {"tx_job": job, "reason": JobFailureReason.GET_PARENTS},
+        )
+
+    def test_cancel_job_emits_tx_failed(self):
+        job = TxJob(TX1_DATA)
+        self.assertTrue(self.manager.add_job(job))
+        self.manager.cancel_job(job)
+
+        self.assertEqual(job.status, JobStatus.CANCELLED)
+        self.manager.pubsub.emit.assert_any_call(
+            TxMiningEvents.MANAGER_TX_FAILED,
+            {"tx_job": job, "reason": JobFailureReason.CANCELLED},
+        )
 
 
 class ManagerClockedTestCase(ClockedTestCase):

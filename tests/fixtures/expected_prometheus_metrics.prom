@@ -31,10 +31,20 @@ txs_jobs_received_total 0.0
 txs_jobs_received_created 1.642511672616624e+09
 # HELP txs_solved_total Number of solved transactions
 # TYPE txs_solved_total counter
-txs_solved_total{miner_address="abc123",miner_id="id1",miner_type="cpuminer"} 1.0
+txs_solved_total{miner_address="abc123",miner_type="cpuminer"} 1.0
 # HELP txs_solved_created Number of solved transactions
 # TYPE txs_solved_created gauge
-txs_solved_created{miner_address="abc123",miner_id="id2",miner_type="cpuminer"} 1.6425116730388892e+09
+txs_solved_created{miner_address="abc123",miner_type="cpuminer"} 1.6425116730388892e+09
+# HELP txs_failed_total Number of transactions that finished without being solved (except timeouts)
+# TYPE txs_failed_total counter
+txs_failed_total{reason="propagation"} 0.0
+txs_failed_total{reason="get_parents"} 0.0
+txs_failed_total{reason="cancelled"} 0.0
+# HELP txs_failed_created Number of transactions that finished without being solved (except timeouts)
+# TYPE txs_failed_created gauge
+txs_failed_created{reason="propagation"} 1.6425116730388892e+09
+txs_failed_created{reason="get_parents"} 1.6425116730388892e+09
+txs_failed_created{reason="cancelled"} 1.6425116730388892e+09
 # HELP txs_solved_weight Txs solved histogram by tx weight
 # TYPE txs_solved_weight histogram
 txs_solved_weight_bucket{le="17.0",miner_type="cpuminer"} 0.0

@@ -12,7 +12,7 @@ from prometheus_client import (  # type: ignore[import]
     write_to_textfile,
 )
 
-from txstratum.jobs import TxJob
+from txstratum.jobs import JobFailureReason, TxJob
 from txstratum.protocol import StratumProtocol
 from txstratum.pubsub import PubSubManager, TxMiningEvents
 from txstratum.utils import Periodic
@@ -40,10 +40,17 @@ METRICS_PUBSUB = {
         "txs_jobs_received",
         "Number of transactions received by the API",
     ),
+    # No miner_id label: the series must outlive a miner's connection, or the
+    # solved count drops every time a miner reconnects.
     "txs_solved": Counter(
         "txs_solved",
         "Number of solved transactions",
-        labelnames=["miner_type", "miner_address", "miner_id"],
+        labelnames=["miner_type", "miner_address"],
+    ),
+    "txs_failed": Counter(
+        "txs_failed",
+        "Number of transactions that finished without being solved (except timeouts)",
+        labelnames=["reason"],
     ),
     "txs_solved_weight": Histogram(
         "txs_solved_weight",
@@ -152,10 +159,15 @@ class BasePrometheusExporter:
         for _, metric in METRICS_PUBSUB.items():
             self.registry.register(metric)
 
+        # Export every reason from the start, so the first failure is an increase.
+        for reason in JobFailureReason:
+            METRICS_PUBSUB["txs_failed"].labels(reason=reason.value)
+
         self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_SOLVED, self._handle_tx_solved)
         self.pubsub.subscribe(
             TxMiningEvents.MANAGER_TX_TIMEOUT, self._handle_tx_timeout
         )
+        self.pubsub.subscribe(TxMiningEvents.MANAGER_TX_FAILED, self._handle_tx_failed)
         self.pubsub.subscribe(
             TxMiningEvents.MANAGER_NEW_TX_JOB, self._handle_new_tx_job
         )
@@ -201,7 +213,6 @@ class BasePrometheusExporter:
         METRICS_PUBSUB["txs_solved"].labels(
             miner_type=protocol.miner_type,
             miner_address=protocol.miner_address_str,
-            miner_id=protocol.miner_id,
         ).inc()
 
         METRICS_PUBSUB["txs_solved_weight"].labels(
@@ -218,6 +229,13 @@ class BasePrometheusExporter:
         tx_job = obj
 
         METRICS_PUBSUB["txs_timeout_weight"].observe(tx_job.get_weight())
+
+    async def _handle_tx_failed(
+        self, obj: Dict[str, Union[TxJob, JobFailureReason]]
+    ) -> None:
+        reason = cast(JobFailureReason, obj["reason"])
+
+        METRICS_PUBSUB["txs_failed"].labels(reason=reason.value).inc()
 
     async def _handle_new_tx_job(self, obj: TxJob) -> None:
         METRICS_PUBSUB["txs_jobs_received"].inc()
@@ -247,13 +265,11 @@ class BasePrometheusExporter:
         # after reconnects (each reconnect generates a new miner_id).
         # suppress(KeyError) guards against metrics that were never initialised
         # for this miner (e.g. Counters that were never incremented).
+        # Alert rules detect a disconnected miner by the absence of these series.
+        # txs_solved has no miner_id, so it is kept.
         with suppress(KeyError):
             METRICS_PUBSUB["miner_up"].remove(
                 protocol.miner_address_str, protocol.miner_id
-            )
-        with suppress(KeyError):
-            METRICS_PUBSUB["txs_solved"].remove(
-                protocol.miner_type, protocol.miner_address_str, protocol.miner_id
             )
         with suppress(KeyError):
             METRICS_PUBSUB["miner_completed_jobs"].remove(
