@@ -10,7 +10,7 @@ import shutil
 import tempfile
 import unittest
 
-from txstratum.jobs import TxJob
+from txstratum.jobs import JobFailureReason, TxJob
 from txstratum.prometheus import METRIC_INFO, MetricData, PrometheusExporter
 from txstratum.protocol import StratumProtocol
 from txstratum.pubsub import PubSubManager, TxMiningEvents
@@ -43,7 +43,7 @@ class TxMiningManagerMock:
         return 1.23
 
 
-class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
+class BasePrometheusTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.pubsub = PubSubManager(asyncio.get_running_loop())
         self.manager = TxMiningManagerMock()
@@ -66,6 +66,8 @@ class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.ran_all = False
 
+
+class ManagerTestCase(BasePrometheusTestCase):
     def test_collect_metrics(self):
         description_keys = set(METRIC_INFO.keys())
         metric_keys = set(MetricData._fields)
@@ -201,3 +203,90 @@ class ManagerTestCase(unittest.IsolatedAsyncioTestCase):
         del self.manager.miners["m1"]
         self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, protocol2)
         await self._run_all_pending_events()
+
+
+# The metrics are module-level globals and prometheus_client 0.9 cannot reset a
+# counter. These tests increment counters that test_update_metrics compares
+# against a fixture, so they live in a class that runs after ManagerTestCase.
+class SolvedAndFailedMetricsTestCase(BasePrometheusTestCase):
+    def _new_miner(self, miner_id: str, address: str) -> StratumProtocol:
+        protocol = StratumProtocol(self.manager)
+        protocol.miner_id = miner_id
+        protocol.miner_address_str = address
+        protocol.miner_version = "cpuminer/1.0"
+        return protocol
+
+    def _emit_solved(self, protocol: StratumProtocol) -> None:
+        tx_job = TxJob(data=TX1_DATA)
+        tx_job.created_at = 80
+        tx_job.started_at = 90
+        tx_job.submitted_at = 100
+        self.pubsub.emit(
+            TxMiningEvents.MANAGER_TX_SOLVED, {"tx_job": tx_job, "protocol": protocol}
+        )
+
+    async def test_solved_count_survives_reconnect(self):
+        """A reconnect (new miner_id) must not drop the solved count of the miner."""
+        prometheus = PrometheusExporter(self.manager, self.pubsub, self.tmpdir)
+        labels = {"miner_type": "cpuminer", "miner_address": "addr_solved"}
+
+        protocol1 = self._new_miner("solved1", "addr_solved")
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol1)
+        self._emit_solved(protocol1)
+        self._emit_solved(protocol1)
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_DISCONNECTED, protocol1)
+        await self._run_all_pending_events()
+
+        self.assertEqual(
+            prometheus.registry.get_sample_value("txs_solved_total", labels), 2
+        )
+
+        protocol2 = self._new_miner("solved2", "addr_solved")
+        self.pubsub.emit(TxMiningEvents.PROTOCOL_MINER_SUBSCRIBED, protocol2)
+        self._emit_solved(protocol2)
+        await self._run_all_pending_events()
+        await prometheus.update_metrics()
+
+        self.assertEqual(
+            prometheus.registry.get_sample_value("txs_solved_total", labels), 3
+        )
+        with open(prometheus.filepath, "r") as fp:
+            content = fp.read()
+        self.assertNotIn('miner_id="solved1"', content)
+        solved_lines = [x for x in content.splitlines() if "txs_solved_total{" in x]
+        self.assertTrue(solved_lines)
+        self.assertFalse([x for x in solved_lines if "miner_id" in x])
+
+    async def test_tx_failed_counts_by_reason(self):
+        prometheus = PrometheusExporter(self.manager, self.pubsub, self.tmpdir)
+
+        def get(reason: JobFailureReason) -> float:
+            value = prometheus.registry.get_sample_value(
+                "txs_failed_total", {"reason": reason.value}
+            )
+            # Every reason is exported before its first failure.
+            self.assertIsNotNone(value)
+            return float(value)
+
+        before = {reason: get(reason) for reason in JobFailureReason}
+
+        for reason in [
+            JobFailureReason.PROPAGATION,
+            JobFailureReason.PROPAGATION,
+            JobFailureReason.CANCELLED,
+        ]:
+            self.pubsub.emit(
+                TxMiningEvents.MANAGER_TX_FAILED,
+                {"tx_job": TxJob(data=TX1_DATA), "reason": reason},
+            )
+        await self._run_all_pending_events()
+
+        self.assertEqual(
+            get(JobFailureReason.PROPAGATION) - before[JobFailureReason.PROPAGATION], 2
+        )
+        self.assertEqual(
+            get(JobFailureReason.GET_PARENTS) - before[JobFailureReason.GET_PARENTS], 0
+        )
+        self.assertEqual(
+            get(JobFailureReason.CANCELLED) - before[JobFailureReason.CANCELLED], 1
+        )

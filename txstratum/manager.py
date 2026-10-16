@@ -12,7 +12,14 @@ from structlog import get_logger
 
 import txstratum.time
 from txstratum.exceptions import JobAlreadyExists, NewJobRefused
-from txstratum.jobs import JobStatus, MinerBlockJob, MinerJob, MinerTxJob, TxJob
+from txstratum.jobs import (
+    JobFailureReason,
+    JobStatus,
+    MinerBlockJob,
+    MinerJob,
+    MinerTxJob,
+    TxJob,
+)
 from txstratum.protocol import StratumProtocol
 from txstratum.pubsub import PubSubManager, TxMiningEvents
 from txstratum.utils import Periodic, calculate_expected_mining_time
@@ -256,6 +263,7 @@ class TxMiningManager:
                 await self._push_tx_job(job)
             except PushTxFailed:
                 tx_job.mark_as_failed("Error when propagating the transaction")
+                self._emit_tx_failed(tx_job, JobFailureReason.PROPAGATION)
                 return
 
         tx_job.mark_as_solved(nonce=nonce, timestamp=job.get_object().timestamp)
@@ -388,6 +396,7 @@ class TxMiningManager:
             parents: List[bytes] = await self.backend.get_tx_parents()
         except Exception as e:
             job.mark_as_failed("Unhandled exception: {}".format(e))
+            self._emit_tx_failed(job, JobFailureReason.GET_PARENTS)
             # Schedule to clean it up.
             self.schedule_job_clean_up(job)
         else:
@@ -403,6 +412,13 @@ class TxMiningManager:
         self.tx_queue.remove(job)
         self.stop_mining_tx(job)
         self.log.info("TxJob cancelled", job=job.to_dict())
+        self._emit_tx_failed(job, JobFailureReason.CANCELLED)
+
+    def _emit_tx_failed(self, job: TxJob, reason: JobFailureReason) -> None:
+        """Publish that a tx job finished without being solved."""
+        self.pubsub.emit(
+            TxMiningEvents.MANAGER_TX_FAILED, {"tx_job": job, "reason": reason}
+        )
 
     def _job_timeout_if_possible(self, job: TxJob) -> None:
         """Stop mining a tx job because it timeout."""
