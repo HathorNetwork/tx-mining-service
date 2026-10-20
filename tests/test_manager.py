@@ -18,9 +18,10 @@ from hathorlib.exceptions import PushTxFailed
 import txstratum.time
 from tests.utils import ClockedTestCase
 from txstratum.exceptions import JobAlreadyExists
-from txstratum.jobs import JobStatus, TxJob
+from txstratum.jobs import JobFailureReason, JobStatus, TxJob
 from txstratum.manager import TxMiningManager
 from txstratum.protocol import StratumProtocol
+from txstratum.pubsub import TxMiningEvents
 
 TX1_DATA = bytes.fromhex(
     "0001000102000000000000089c0d40a9b1edfb499bc624833fde87ae459d495000393f4aaa00006"
@@ -930,6 +931,93 @@ class ManagerTestCase(unittest.TestCase):
         # Assertions
         self.assertEqual(self.manager.backend.pushes_attempted, 1)
         self.assertEqual(tx_job.status, JobStatus.FAILED)
+        self.manager.pubsub.emit.assert_any_call(
+            TxMiningEvents.MANAGER_TX_FAILED,
+            {"tx_job": tx_job, "reason": JobFailureReason.PROPAGATION},
+        )
+
+    def _setup_gated_push(self) -> List["asyncio.Future[bool]"]:
+        """Make each push wait on a future that the test resolves."""
+        pushes: List["asyncio.Future[bool]"] = []
+
+        async def push_tx_or_block(raw: bytes) -> bool:
+            future: "asyncio.Future[bool]" = self.loop.create_future()
+            pushes.append(future)
+            return await future
+
+        self.manager.backend.push_tx_or_block = push_tx_or_block
+        return pushes
+
+    def test_push_error_after_timeout_keeps_timeout(self):
+        pushes = self._setup_gated_push()
+        conn = self._get_ready_miner()
+        job = TxJob(TX1_DATA, propagate=True)
+        self.assertTrue(self.manager.add_job(job))
+        miner_job = conn.current_job
+
+        self.manager.submit_solution(conn, miner_job, bytes.fromhex(TX1_NONCE))
+        self._run_all_pending_events()
+        self.assertEqual(len(pushes), 1)
+
+        # The timeout fires while the push is still running.
+        self.manager._job_timeout_if_possible(job)
+        self.assertEqual(job.status, JobStatus.TIMEOUT)
+
+        pushes[0].set_exception(PushTxFailed("Error pushing tx"))
+        self._run_all_pending_events()
+
+        self.assertEqual(job.status, JobStatus.TIMEOUT)
+        self.assertEqual(self.manager.txs_timeout, 1)
+        emitted = [c.args[0] for c in self.manager.pubsub.emit.call_args_list]
+        self.assertNotIn(TxMiningEvents.MANAGER_TX_FAILED, emitted)
+
+    def test_push_error_after_other_solution_keeps_done(self):
+        pushes = self._setup_gated_push()
+        conn = self._get_ready_miner()
+        job = TxJob(TX1_DATA, propagate=True)
+        self.assertTrue(self.manager.add_job(job))
+        miner_job = conn.current_job
+
+        # Two solutions arrive before the first push finishes.
+        self.manager.submit_solution(conn, miner_job, bytes.fromhex(TX1_NONCE))
+        self.manager.submit_solution(conn, miner_job, bytes.fromhex(TX1_NONCE))
+        self._run_all_pending_events()
+        self.assertEqual(len(pushes), 2)
+
+        pushes[0].set_result(True)
+        self._run_all_pending_events()
+        self.assertEqual(job.status, JobStatus.DONE)
+
+        pushes[1].set_exception(PushTxFailed("Transaction already exists"))
+        self._run_all_pending_events()
+
+        self.assertEqual(job.status, JobStatus.DONE)
+        self.assertEqual(self.manager.txs_solved, 1)
+        emitted = [c.args[0] for c in self.manager.pubsub.emit.call_args_list]
+        self.assertNotIn(TxMiningEvents.MANAGER_TX_FAILED, emitted)
+
+    def test_error_when_getting_parents(self):
+        # HathorClientTest.get_tx_parents raises NotImplementedError
+        job = TxJob(TX1_DATA, add_parents=True)
+        self.assertTrue(self.manager.add_job(job))
+        self._run_all_pending_events()
+
+        self.assertEqual(job.status, JobStatus.FAILED)
+        self.manager.pubsub.emit.assert_any_call(
+            TxMiningEvents.MANAGER_TX_FAILED,
+            {"tx_job": job, "reason": JobFailureReason.GET_PARENTS},
+        )
+
+    def test_cancel_job_emits_tx_failed(self):
+        job = TxJob(TX1_DATA)
+        self.assertTrue(self.manager.add_job(job))
+        self.manager.cancel_job(job)
+
+        self.assertEqual(job.status, JobStatus.CANCELLED)
+        self.manager.pubsub.emit.assert_any_call(
+            TxMiningEvents.MANAGER_TX_FAILED,
+            {"tx_job": job, "reason": JobFailureReason.CANCELLED},
+        )
 
 
 class ManagerClockedTestCase(ClockedTestCase):
