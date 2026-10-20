@@ -262,6 +262,16 @@ class TxMiningManager:
             try:
                 await self._push_tx_job(job)
             except PushTxFailed:
+                if tx_job.status in JobStatus.get_after_mining_states():
+                    # The job timed out, was cancelled, or another solution
+                    # finished it while we were pushing. Keep that end state,
+                    # so the job is not counted twice.
+                    self.log.warning(
+                        "Push failed for a job that has already finished",
+                        status=tx_job.status,
+                        job_id=tx_job.uuid.hex(),
+                    )
+                    return
                 tx_job.mark_as_failed("Error when propagating the transaction")
                 self._emit_tx_failed(tx_job, JobFailureReason.PROPAGATION)
                 return

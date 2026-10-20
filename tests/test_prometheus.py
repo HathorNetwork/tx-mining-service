@@ -107,7 +107,8 @@ class ManagerTestCase(BasePrometheusTestCase):
 
         await prometheus.update_metrics()
 
-        # Check the metrics match the expected values
+        # Check the metrics match the expected values. This needs to run before
+        # SolvedAndFailedMetricsTestCase, whose counters would show up here.
         with open(
             "tests/fixtures/expected_prometheus_metrics.prom", "r"
         ) as fp_expected:
