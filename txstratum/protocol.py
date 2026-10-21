@@ -124,6 +124,9 @@ class StratumProtocol(JSONRPCProtocol):
         # For testing only.
         self._update_job_timestamp: bool = True
 
+        # If miner was marked to stop mining the current job
+        self.stop_mining_job: bool = False
+
         self.last_submit_at: float = 0.0
         self.completed_jobs: int = 0
         self.txs_solved: int = 0
@@ -441,7 +444,7 @@ class StratumProtocol(JSONRPCProtocol):
 
         else:
             # If the solution is not valid, get a new job.
-            self.manager.update_miner_job(self, clean=True)
+            self.manager.update_miners_job()
 
     def method_configure(self, params: Any, msgid: JSONRPCId) -> None:
         """Handle stratum-extensions configuration from JSONRPC.
@@ -493,7 +496,7 @@ class StratumProtocol(JSONRPCProtocol):
         """Set current weight and update miner's job."""
         self.current_weight = max(self.MIN_WEIGHT, weight)
         assert self.current_job is not None
-        self.manager.update_miner_job(self, clean=False)
+        self.update_job(self.current_job, clean=False)
 
     def is_ready(self) -> bool:
         """Return True if miner is ready to mine."""
@@ -554,7 +557,7 @@ class StratumProtocol(JSONRPCProtocol):
         """
         assert self.current_job is not None
 
-        self.manager.update_miner_job(self, clean=False)
+        self.update_job(self.current_job, clean=False)
 
     def update_job(self, job: "MinerJob", *, clean: bool) -> None:
         """Update miner's job. It is called by the manager.
