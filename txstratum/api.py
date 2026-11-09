@@ -152,10 +152,15 @@ class App:
         if not tx_hex:
             self.log.debug("missing-tx", data=data)
             return web.json_response({"error": "missing-tx"}, status=400)
+        if not isinstance(tx_hex, str):
+            self.log.debug("invalid-tx(0)", data=data)
+            return web.json_response({"error": "invalid-tx"}, status=400)
+        # IndexError: hathorlib releases without a length guard in tx_or_block_from_bytes raise it,
+        # instead of StructError, for input shorter than 2 bytes.
         try:
             tx_bytes = bytes.fromhex(tx_hex)
             tx = tx_or_block_from_bytes(tx_bytes)
-        except (ValueError, TxValidationError, StructError):
+        except (ValueError, TxValidationError, StructError, IndexError):
             self.log.debug("invalid-tx(1)", data=data)
             return web.json_response({"error": "invalid-tx"}, status=400)
 
@@ -190,7 +195,7 @@ class App:
         else:
             try:
                 timeout = min(self.tx_timeout, float(data["timeout"]))
-            except ValueError:
+            except (TypeError, ValueError):
                 self.log.debug("invalid-timeout(1)", data=data)
                 return web.json_response({"error": "invalid-timeout"}, status=400)
 
