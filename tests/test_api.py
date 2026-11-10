@@ -4,7 +4,7 @@ Copyright (c) Hathor Labs and its affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 from hathorlib.base_transaction import tx_or_block_from_bytes
@@ -221,6 +221,35 @@ class BaseAppTestCase(AioHTTPTestCase):
         self.assertEqual({"error": "invalid-tx"}, data)
 
     @unittest_run_loop
+    async def test_submit_job_tx_too_short(self):
+        # Under 2 bytes there is no version byte to read. This must be a 400, not a 500.
+        # "01" carries a valid version value, so the result does not depend on the byte value.
+        for tx_hex in ["00", "01", "ff"]:
+            resp = await self.client.request("POST", "/submit-job", json={"tx": tx_hex})
+            data = await resp.json()
+            self.assertEqual(400, resp.status, tx_hex)
+            self.assertEqual({"error": "invalid-tx"}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_tx_not_a_string(self):
+        for tx_value in [123, True, ["00"], {"a": 1}]:
+            resp = await self.client.request(
+                "POST", "/submit-job", json={"tx": tx_value}
+            )
+            data = await resp.json()
+            self.assertEqual(400, resp.status, tx_value)
+            self.assertEqual({"error": "invalid-tx"}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_tx_too_short_before_hathorlib_guard(self):
+        # Pin the API-side guard: simulate a hathorlib release that raises a bare IndexError.
+        with patch("txstratum.api.tx_or_block_from_bytes", side_effect=IndexError):
+            resp = await self.client.request("POST", "/submit-job", json={"tx": "00"})
+        data = await resp.json()
+        self.assertEqual(400, resp.status)
+        self.assertEqual({"error": "invalid-tx"}, data)
+
+    @unittest_run_loop
     async def test_submit_job_invalid_tx_2(self):
         resp = await self.client.request(
             "POST", "/submit-job", json={"tx": INVALID_TX_DATA.hex()}
@@ -321,6 +350,18 @@ class BaseAppTestCase(AioHTTPTestCase):
         data = await resp.json()
         self.assertEqual(400, resp.status)
         self.assertEqual({"error": "invalid-timeout"}, data)
+
+    @unittest_run_loop
+    async def test_submit_job_timeout_not_a_number(self):
+        for timeout in [None, [1], {}]:
+            json_data = {
+                "tx": update_timestamp(TX1_DATA).hex(),
+                "timeout": timeout,
+            }
+            resp = await self.client.request("POST", "/submit-job", json=json_data)
+            data = await resp.json()
+            self.assertEqual(400, resp.status, timeout)
+            self.assertEqual({"error": "invalid-timeout"}, data)
 
     @unittest_run_loop
     async def test_submit_job_negative_timeout(self):
