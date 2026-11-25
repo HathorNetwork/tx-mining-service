@@ -25,8 +25,10 @@ needed is in cli.py to instantiate DevMiningManager instead of TxMiningManager.
 """
 
 import asyncio
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+import aiohttp
 from structlog import get_logger
 
 import txstratum.time
@@ -55,6 +57,13 @@ class DevMiningManager:
 
     TX_CLEAN_UP_INTERVAL = 300.0  # seconds
 
+    # Upper bound for the timestamp cache. A tx's timestamp is covered by its
+    # hash, so a hash->timestamp entry can never go stale whatever happens to
+    # the tx afterwards; the bound only keeps the dict from growing over a long
+    # run. Note these hashes are mostly DAG tips — the least confirmed vertices
+    # in the graph — so confirmation state is deliberately not part of this.
+    PARENT_TIMESTAMP_CACHE_SIZE = 1024
+
     def __init__(self, backend: "HathorClient"):
         """Initialize the dev mining manager."""
         self.log = logger.new()
@@ -63,6 +72,7 @@ class DevMiningManager:
         self.tx_jobs: Dict[bytes, TxJob] = {}
         self._tasks: Dict[bytes, asyncio.Task[None]] = {}
         self.refuse_new_jobs = False
+        self._parent_timestamps: "OrderedDict[bytes, int]" = OrderedDict()
 
         # Statistics — same fields as TxMiningManager for API compatibility.
         self.txs_solved: int = 0
@@ -182,6 +192,122 @@ class DevMiningManager:
         job.set_parents(parents)
         await self._mine_job(job)
 
+    async def _fetch_tx_timestamp(self, tx_hash: bytes) -> Optional[int]:
+        """Read one transaction's timestamp from the fullnode, or None.
+
+        hathorlib's HathorClient has no "get transaction by hash", and this fix
+        is deliberately confined to this repo, so the client's session and URL
+        builder are used directly. Both are private, which is exactly why this
+        is the only place that touches them: if hathorlib later grows a proper
+        accessor (or the parents endpoint starts returning timestamps, as
+        HathorNetwork/tx-mining-service#172 sketches), this body is the only
+        thing that has to change.
+
+        Returns None on any failure — a timestamp we cannot read is one we
+        cannot clamp against, and degrading to plain wall-clock time is far
+        better than failing the job. That promise has to hold absolutely: this
+        runs inside the mining task, so an exception escaping here strands the
+        job in MINING with no cleanup scheduled. Hence both the private-attribute
+        access and the payload parsing below are guarded.
+        """
+        cached = self._parent_timestamps.get(tx_hash)
+        if cached is not None:
+            self._parent_timestamps.move_to_end(tx_hash)
+            return cached
+
+        try:
+            # Inside the try on purpose: these attributes are private, so a
+            # rename in a future hathorlib degrades to wall-clock time with a
+            # warning instead of stranding every job that needs a parent.
+            session = self.backend._session
+            if session is None:
+                return None
+            url = self.backend._get_url("transaction")
+            # An explicit timeout: the session carries aiohttp's 5-minute
+            # default, and this manager never arms a job timeout, so a stalled
+            # fullnode would otherwise hold the job in MINING for that long.
+            # A lookup slower than this is worthless anyway — the clock it is
+            # being compared against has already moved on.
+            async with session.get(
+                url,
+                params={"id": tx_hash.hex()},
+                timeout=aiohttp.ClientTimeout(total=2),
+            ) as resp:
+                if resp.status != 200:
+                    self.log.warn(
+                        "Parent timestamp lookup failed",
+                        parent=tx_hash.hex(),
+                        status=resp.status,
+                    )
+                    return None
+                data = await resp.json()
+        except Exception as e:
+            self.log.warn(
+                "Could not read parent timestamp",
+                parent=tx_hash.hex(),
+                error=f"{type(e).__name__}: {e}",
+            )
+            return None
+
+        # The payload is not assumed well-formed. A JSON array, a null, or a
+        # non-object "tx" must degrade like any other unreadable predecessor
+        # rather than raise, so every access below is type-checked first.
+        if not isinstance(data, dict):
+            self.log.warn("Malformed transaction payload", parent=tx_hash.hex())
+            return None
+        if not data.get("success"):
+            # Expected: the fullnode has not indexed this tx yet. Not logged —
+            # the clamp exists for txs broadcast moments ago, so this is the
+            # ordinary case rather than a fault.
+            return None
+        tx_data = data.get("tx")
+        timestamp = tx_data.get("timestamp") if isinstance(tx_data, dict) else None
+        if not isinstance(timestamp, int):
+            self.log.warn("Malformed transaction payload", parent=tx_hash.hex())
+            return None
+
+        self._remember_timestamp(tx_hash, timestamp)
+        return timestamp
+
+    def _remember_timestamp(self, tx_hash: bytes, timestamp: int) -> None:
+        """Record one hash's timestamp, evicting the oldest past the bound."""
+        self._parent_timestamps[tx_hash] = timestamp
+        if len(self._parent_timestamps) > self.PARENT_TIMESTAMP_CACHE_SIZE:
+            self._parent_timestamps.popitem(last=False)
+
+    async def _get_timestamp_for(self, predecessors: List[bytes]) -> int:
+        """Return a timestamp strictly greater than every predecessor's.
+
+        The fullnode enforces this twice, in two separate verifiers, and both
+        must hold: a tx must beat each of its parents (`vertex_verifier`) and
+        each tx it spends (`transaction_verifier`). Neither set contains the
+        other — parents are drawn from the current tips, while a spent tx may
+        have been confirmed long ago and so can never be selected as a parent.
+        Pass both.
+
+        Wall-clock time alone does not satisfy either rule at 1-second
+        granularity: two txs in the same second, where one precedes the other,
+        produce a rejection the client cannot prevent or repair, since both the
+        timestamp and the parents are assigned here, under the nonce.
+
+        The lead over wall-clock grows only along a chain of same-second
+        predecessors, at most one second per link, against hathor-core's
+        300s MAX_FUTURE_TIMESTAMP_ALLOWED. Sustained chaining above one tx per
+        second could in principle reach that ceiling; measured workloads stay
+        at a lead of one second. See HathorNetwork/tx-mining-service#172 for
+        the full analysis and why deferring is not worth its livelock risk.
+        """
+        # dict.fromkeys dedups while preserving order: several inputs commonly
+        # spend the same tx, and a parent is often an input too.
+        timestamps: List[Optional[int]] = list(
+            await asyncio.gather(
+                *(self._fetch_tx_timestamp(h) for h in dict.fromkeys(predecessors))
+            )
+        )
+        # Read the clock after the lookups, not before — they are network I/O.
+        now = int(txstratum.time.time())
+        return max([now, *(ts + 1 for ts in timestamps if ts is not None)])
+
     async def _mine_job(self, job: TxJob) -> None:
         """Solve PoW for a transaction job.
 
@@ -195,9 +321,23 @@ class DevMiningManager:
         start = txstratum.time.time()
 
         tx = job.get_tx()
-        # Update timestamp to current time — the fullnode validates that tx
-        # timestamps are within an acceptable delta of the current time.
-        tx.timestamp = int(txstratum.time.time())
+        # Stamp above everything the fullnode compares this tx against: its DAG
+        # parents and every tx it spends. Both are checked, in separate
+        # verifiers, and a spent tx is frequently not among the parents.
+        #
+        # The client's own timestamp is a floor here, not something to discard.
+        # It chose the inputs, so it is the one party that already knows what
+        # they spend — and api.py has already bounded it to within
+        # MAX_TIMESTAMP_DELTA of now, so honouring it cannot push this tx past
+        # what the fullnode accepts. A client that clamps above its own inputs
+        # therefore needs no per-input lookup here at all, which is the only
+        # version of this that survives a tx with 200 inputs.
+        tx.timestamp = max(
+            tx.timestamp,
+            await self._get_timestamp_for(
+                [*tx.parents, *(txin.tx_id for txin in tx.inputs)]
+            ),
+        )
 
         loop = asyncio.get_event_loop()
         solved = await loop.run_in_executor(None, solve_tx, tx)
@@ -206,6 +346,14 @@ class DevMiningManager:
             self.txs_failed += 1
             self._schedule_cleanup(job)
             return
+
+        # Everything mined here is a candidate predecessor for the next job: a
+        # chained flock arriving at one service is, by construction, mostly this
+        # service's own recent output. Recording it turns those lookups into
+        # memory reads at exactly the concurrency that makes the clamp
+        # load-bearing — and the hash covers the timestamp, so the entry is
+        # valid whatever happens to the tx afterwards.
+        self._remember_timestamp(tx.hash, tx.timestamp)
 
         elapsed_ms = (txstratum.time.time() - start) * 1000
         nonce = tx.get_struct_nonce()
