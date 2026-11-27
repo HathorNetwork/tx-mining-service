@@ -15,7 +15,7 @@ from hathorlib.utils import decode_address
 from structlog import get_logger
 
 import txstratum.time
-from txstratum.jobs import MinerBlockJob
+from txstratum.jobs import MinerBlockJob, MinerTxJob
 from txstratum.pubsub import TxMiningEvents
 from txstratum.utils import (
     JSONRPCError,
@@ -23,6 +23,7 @@ from txstratum.utils import (
     JSONRPCProtocol,
     MaxSizeOrderedDict,
     Periodic,
+    Ticker,
 )
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ class SubmittedWork(NamedTuple):
 
     timestamp: float
     weight: float
+    # Seconds the miner spent on block jobs to find this share.
     dt: float
 
 
@@ -65,7 +67,7 @@ class StratumProtocol(JSONRPCProtocol):
         60 * 15
     )  # in seconds, size of the window to use for estimating miner's hashrate
     TARGET_JOB_TIME = 15  # in seconds, adjust difficulty so jobs take this long
-    JOB_UPDATE_INTERVAL = 2  # in seconds, to update the timestamp of the job
+    JOB_UPDATE_INTERVAL = 2  # in seconds, to update the timestamp of a block job
     MESSAGES_TIMEOUT_INTERVAL = (
         5  # in seconds, the interval to clear timed out messages
     )
@@ -112,6 +114,10 @@ class StratumProtocol(JSONRPCProtocol):
         self.rtt_time_message_sent: Optional[float] = None
 
         self._submitted_work: List[SubmittedWork] = []
+        # Time on block jobs since the last block share, for the hashrate estimator.
+        # Job refreshes do not reset it. Time on tx jobs does not count.
+        self._block_work_time: float = 0.0
+        self._block_job_since: Optional[float] = None
 
         self._authorized: bool = False
         self._subscribed: bool = False
@@ -247,8 +253,8 @@ class StratumProtocol(JSONRPCProtocol):
             asyncio.ensure_future(self.estimator_task.start())
 
         if self.refresh_job_task is None:
-            # Start refresh job periodic task.
-            self.refresh_job_task = Periodic(self.refresh_job, self.JOB_UPDATE_INTERVAL)
+            # Start refresh job task, just after each whole second.
+            self.refresh_job_task = Ticker(self.refresh_job)
             asyncio.ensure_future(self.refresh_job_task.start())
 
         if self.messages_timeout_task is None:
@@ -403,8 +409,7 @@ class StratumProtocol(JSONRPCProtocol):
             # with the miner hashrate, latency and other things might affect this time
             # Try to get Stratum RTT to consider in the `dt` calculus, so we
             # can consider a MinerTxJob also as a submitted work
-            assert job.started_at is not None
-            dt = job.submitted_at - job.started_at
+            dt = self._take_block_work_time(now)
             self._submitted_work.append(
                 SubmittedWork(job.submitted_at, job.share_weight, dt)
             )
@@ -439,9 +444,20 @@ class StratumProtocol(JSONRPCProtocol):
                 )
                 self.txs_solved += 1
 
-        else:
+        elif not self._tx_header_is_current(now):
             # If the solution is not valid, get a new job.
+            # For a tx job in the same second the new job would have the same
+            # header, and clean=True would make the miner scan it again.
             self.manager.update_miner_job(self, clean=True)
+
+    def _take_block_work_time(self, now: float) -> float:
+        """Return the time spent on block jobs since the last block share, and reset it."""
+        dt = self._block_work_time
+        if self._block_job_since is not None:
+            dt += now - self._block_job_since
+            self._block_job_since = now
+        self._block_work_time = 0.0
+        return dt
 
     def method_configure(self, params: Any, msgid: JSONRPCId) -> None:
         """Handle stratum-extensions configuration from JSONRPC.
@@ -485,6 +501,8 @@ class StratumProtocol(JSONRPCProtocol):
         for x in self._submitted_work:
             delta += x.dt
             logwork = sum_weights(logwork, x.weight)
+        if delta <= 0:
+            return
         # calculate hashrate in GH/s
         self.hashrate_ghs = 2 ** (logwork - log2(delta) - 30)
         self.set_current_weight(logwork - log2(delta) + log2(self.TARGET_JOB_TIME))
@@ -550,11 +568,42 @@ class StratumProtocol(JSONRPCProtocol):
     async def refresh_job(self) -> None:
         """Refresh miner's job, updating timestamp.
 
-        This is run as a periodic task.
+        This runs just after each whole second (see `Ticker`). A tx header has a
+        4-byte nonce, so a fast miner tries all its 2**32 nonces in less than a
+        second; a new timestamp gives it a new header. When the header would not
+        change, the job is not sent again. Block jobs have a 16-byte nonce and
+        are refreshed every `JOB_UPDATE_INTERVAL` seconds, as before.
         """
-        assert self.current_job is not None
+        if self.current_job is None:
+            # No job yet, e.g. the miner connected before the first block template.
+            self.manager.update_miner_job(self)
+            return
+
+        now = txstratum.time.time()
+        if isinstance(self.current_job, MinerTxJob):
+            if self._tx_header_is_current(now):
+                return
+        else:
+            started_at = self.current_job.started_at or 0.0
+            # 0.5 s of margin, because refreshes run on the second tick.
+            if now - started_at < self.JOB_UPDATE_INTERVAL - 0.5:
+                return
 
         self.manager.update_miner_job(self, clean=False)
+
+    def _tx_header_is_current(self, now: float) -> bool:
+        """Return True if a new job would give this miner the same tx header.
+
+        It is True when the miner is mining the first tx in the queue and its job
+        already has the timestamp of the current second.
+        """
+        job = self.current_job
+        if not isinstance(job, MinerTxJob) or not self._update_job_timestamp:
+            return False
+        queue = self.manager.tx_queue
+        if len(queue) == 0 or queue[0] is not job.tx_job:
+            return False
+        return job.get_object().timestamp == int(now)
 
     def update_job(self, job: "MinerJob", *, clean: bool) -> None:
         """Update miner's job. It is called by the manager.
@@ -577,6 +626,14 @@ class StratumProtocol(JSONRPCProtocol):
 
         # Update when the job started mining
         job.started_at = txstratum.time.time()
+
+        # Account the time on block jobs, for the hashrate estimator.
+        if job.is_block:
+            if self._block_job_since is None:
+                self._block_job_since = job.started_at
+        elif self._block_job_since is not None:
+            self._block_work_time += job.started_at - self._block_job_since
+            self._block_job_since = None
 
         # Add job to the job list and set it as current job
         self.current_job = job

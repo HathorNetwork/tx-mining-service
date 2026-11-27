@@ -24,6 +24,7 @@ from typing import (
 
 from structlog import get_logger
 
+import txstratum.time
 from txstratum.constants import DEFAULT_EXPECTED_MINING_TIME
 from txstratum.exceptions import InvalidVersionFormat
 
@@ -93,6 +94,36 @@ class Periodic:
             except Exception:
                 logger.exception("periodic call failed")
                 break
+
+
+class Ticker(Periodic):
+    """Create an asyncio task that calls an async function just after each whole second.
+
+    The seconds are the seconds of `txstratum.time.time()`, so a call happens soon after
+    the integer timestamp changes. Unlike `Periodic`, an exception in a call is logged
+    and the next call still happens.
+    """
+
+    OFFSET = 0.01  # in seconds, how long after the second changes the call happens
+
+    def __init__(self, afunc: Callable[..., Awaitable[None]]):
+        """Create Ticker instance from async function."""
+        super().__init__(afunc, 1)
+
+    def next_delay(self) -> float:
+        """Return the number of seconds until the next call."""
+        return 1 - txstratum.time.time() % 1 + self.OFFSET
+
+    async def _run(self) -> None:
+        assert self._task is not None
+        while self.is_started:
+            await asyncio.sleep(self.next_delay())
+            try:
+                await self.afunc(*self.args, **self.kwargs)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("ticker call failed")
 
 
 class LineProtocol(asyncio.Protocol):
